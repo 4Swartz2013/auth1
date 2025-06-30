@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
-import * as CryptoJS from "npm:crypto-js@4.1.1";
+import AES from "npm:crypto-js@4.1.1/aes";
+import Utf8 from "npm:crypto-js@4.1.1/enc-utf8";
 
 interface CredentialPayload {
   userId: string;
@@ -58,7 +59,7 @@ serve(async (req: Request) => {
     // Encrypt sensitive data
     const encryptData = (data: string | undefined) => {
       if (!data) return null;
-      return CryptoJS.AES.encrypt(data, encryptionKey).toString();
+      return AES.encrypt(data, encryptionKey).toString();
     };
 
     const encryptedAccessToken = encryptData(payload.accessToken);

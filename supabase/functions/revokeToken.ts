@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
-import * as CryptoJS from "npm:crypto-js@4.1.1";
+import AES from "npm:crypto-js@4.1.1/aes";
+import Utf8 from "npm:crypto-js@4.1.1/enc-utf8";
 
 interface RevokeTokenPayload {
   integrationId: string;
@@ -71,8 +72,8 @@ serve(async (req: Request) => {
     // Decrypt tokens if needed to call provider revoke endpoint
     const decryptData = (encryptedData: string | null) => {
       if (!encryptedData) return null;
-      const bytes = CryptoJS.AES.decrypt(encryptedData, encryptionKey);
-      return bytes.toString(CryptoJS.enc.Utf8);
+      const bytes = AES.decrypt(encryptedData, encryptionKey);
+      return bytes.toString(Utf8);
     };
 
     const accessToken = decryptData(credential.access_token);

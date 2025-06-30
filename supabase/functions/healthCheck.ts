@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
-import * as CryptoJS from "npm:crypto-js@4.1.1";
+import AES from "npm:crypto-js@4.1.1/aes";
+import Utf8 from "npm:crypto-js@4.1.1/enc-utf8";
 
 // This function runs on a cron schedule (hourly)
 // It checks all active integrations and refreshes tokens if needed
@@ -94,8 +95,8 @@ serve(async (req: Request) => {
           // Decrypt refresh token
           const decryptData = (encryptedData: string | null) => {
             if (!encryptedData) return null;
-            const bytes = CryptoJS.AES.decrypt(encryptedData, encryptionKey);
-            return bytes.toString(CryptoJS.enc.Utf8);
+            const bytes = AES.decrypt(encryptedData, encryptionKey);
+            return bytes.toString(Utf8);
           };
 
           const refreshToken = decryptData(credential.refresh_token);
@@ -111,7 +112,7 @@ serve(async (req: Request) => {
           
           // Encrypt new tokens
           const encryptData = (data: string) => {
-            return CryptoJS.AES.encrypt(data, encryptionKey).toString();
+            return AES.encrypt(data, encryptionKey).toString();
           };
 
           const encryptedAccessToken = encryptData(newAccessToken);
