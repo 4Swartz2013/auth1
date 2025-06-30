@@ -1,21 +1,15 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.39.0";
-import AES from "npm:crypto-js@4.1.1/aes";
-import Utf8 from "npm:crypto-js@4.1.1/enc-utf8";
-
-interface RevokeTokenPayload {
-  integrationId: string;
-  userId: string;
-}
+import { createClient } from "npm:@supabase/supabase-js";
+import AES from "npm:crypto-js/aes";
+import Utf8 from "npm:crypto-js/enc-utf8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-serve(async (req: Request) => {
-  // Handle CORS preflight request
+Deno.serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -23,117 +17,79 @@ serve(async (req: Request) => {
     });
   }
 
+  // Only allow POST requests
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
-    // Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const encryptionKey = Deno.env.get("CREDENTIAL_ENCRYPTION_KEY") || "";
-    
+
     if (!supabaseUrl || !supabaseServiceKey || !encryptionKey) {
       throw new Error("Missing environment variables");
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Parse request body
-    const payload: RevokeTokenPayload = await req.json();
-    
-    // Validate required fields
-    if (!payload.integrationId || !payload.userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const { userId, platform } = await req.json();
+
+    if (!userId || !platform) {
+      throw new Error("Missing required parameters: userId and platform");
     }
 
-    // Get integration and credential details
-    const { data: integration, error: integrationError } = await supabase
-      .from('integrations')
-      .select('*')
-      .eq('id', payload.integrationId)
-      .eq('user_id', payload.userId)
+    // Get the credential
+    const { data: credential, error } = await supabase
+      .from("credentials")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("platform", platform)
+      .eq("is_active", true)
       .single();
 
-    if (integrationError) {
-      throw new Error(`Integration not found: ${integrationError.message}`);
+    if (error || !credential) {
+      throw new Error(`Credential not found: ${error?.message || "Unknown error"}`);
     }
 
-    const { data: credential, error: credentialError } = await supabase
-      .from('credentials')
-      .select('*')
-      .eq('integration_id', payload.integrationId)
-      .eq('user_id', payload.userId)
-      .single();
+    // In a real implementation, this would call the provider's token revocation API
+    // For this example, we'll just mark the credential as inactive
 
-    if (credentialError) {
-      throw new Error(`Credentials not found: ${credentialError.message}`);
-    }
-
-    // Decrypt tokens if needed to call provider revoke endpoint
-    const decryptData = (encryptedData: string | null) => {
-      if (!encryptedData) return null;
-      const bytes = AES.decrypt(encryptedData, encryptionKey);
-      return bytes.toString(Utf8);
-    };
-
-    const accessToken = decryptData(credential.access_token);
-    
-    // Call provider's revoke endpoint if needed
-    // This would typically call the provider's token revocation endpoint
-    // For this implementation, we'll simulate a successful revocation
-    
-    // Update credentials to mark as inactive
+    // Update the credential in the database
     const { error: updateError } = await supabase
-      .from('credentials')
+      .from("credentials")
       .update({
         is_active: false,
-        status: 'disconnected',
-        updated_at: new Date().toISOString()
+        status: "disconnected",
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', credential.id);
+      .eq("id", credential.id);
 
     if (updateError) {
-      throw new Error(`Failed to update credentials: ${updateError.message}`);
+      throw new Error(`Failed to update credential: ${updateError.message}`);
     }
 
-    // Update integration status
-    const { error: statusError } = await supabase
-      .from('integrations')
-      .update({
-        status: 'disconnected',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', integration.id);
-
-    if (statusError) {
-      throw new Error(`Failed to update integration status: ${statusError.message}`);
-    }
-
-    // Log the activity
-    await supabase.rpc('log_integration_activity', {
-      p_user_id: payload.userId,
-      p_platform: integration.provider_key,
-      p_action: 'revoke_token',
-      p_status: 'disconnected',
-      p_message: `Successfully disconnected from ${integration.provider_name}`
+    // Log the revocation
+    await supabase.from("integration_logs").insert({
+      user_id: userId,
+      platform,
+      action: "revoke_token",
+      status: "disconnected",
+      log_level: "info",
+      message: "Integration disconnected successfully",
     });
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      }
-    );
-  } catch (error) {
-    console.error("Error revoking token:", error);
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error("Token revocation error:", err);
     
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
-      }
-    );
+    return new Response(JSON.stringify({ success: false, error: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

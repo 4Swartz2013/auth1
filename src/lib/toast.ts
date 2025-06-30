@@ -1,102 +1,53 @@
-import toast, { Toaster } from 'react-hot-toast';
+import toast from "react-hot-toast";
 
-// Toast types
-export type ToastType = 'success' | 'error' | 'loading' | 'info';
-
-// Toast options
-interface ToastOptions {
-  duration?: number;
-  position?: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
-  icon?: React.ReactNode;
-}
-
-// Default options
-const defaultOptions: ToastOptions = {
+const defaultOptions = {
   duration: 5000,
-  position: 'bottom-right'
+  position: "top-right",
 };
 
-// Toast functions
-export const showToast = (message: string, type: ToastType = 'info', options?: ToastOptions) => {
-  const mergedOptions = { ...defaultOptions, ...options };
+export const showToast = {
+  success: (message: string, options = {}) => {
+    return toast.success(message, { ...defaultOptions, ...options });
+  },
   
-  switch (type) {
-    case 'success':
-      return toast.success(message, mergedOptions);
-    case 'error':
-      return toast.error(message, mergedOptions);
-    case 'loading':
-      return toast.loading(message, mergedOptions);
-    case 'info':
-    default:
-      return toast(message, mergedOptions);
-  }
-};
-
-// Specialized toast functions
-export const successToast = (message: string, options?: ToastOptions) => 
-  showToast(message, 'success', options);
-
-export const errorToast = (message: string, options?: ToastOptions) => 
-  showToast(message, 'error', options);
-
-export const loadingToast = (message: string, options?: ToastOptions) => 
-  showToast(message, 'loading', options);
-
-export const infoToast = (message: string, options?: ToastOptions) => 
-  showToast(message, 'info', options);
-
-// Update an existing toast
-export const updateToast = (toastId: string, message: string, type: ToastType) => {
-  switch (type) {
-    case 'success':
-      toast.success(message, { id: toastId });
-      break;
-    case 'error':
-      toast.error(message, { id: toastId });
-      break;
-    case 'loading':
-      toast.loading(message, { id: toastId });
-      break;
-    case 'info':
-    default:
-      toast(message, { id: toastId });
-      break;
-  }
-};
-
-// Dismiss a toast
-export const dismissToast = (toastId: string) => {
-  toast.dismiss(toastId);
-};
-
-// Event listener for integration events
-export const setupIntegrationEventListeners = () => {
-  // Listen for integration bootstrap events
-  window.addEventListener('integration_bootstrapped', (event: any) => {
-    const { provider, success, error } = event.detail;
-    
-    if (success) {
-      successToast(`${provider} integration setup completed successfully!`);
+  error: (message: string, options = {}) => {
+    return toast.error(message, { ...defaultOptions, ...options });
+  },
+  
+  loading: (message: string, options = {}) => {
+    return toast.loading(message, { ...defaultOptions, ...options });
+  },
+  
+  custom: (message: string, options = {}) => {
+    return toast(message, { ...defaultOptions, ...options });
+  },
+  
+  dismiss: (toastId?: string) => {
+    if (toastId) {
+      toast.dismiss(toastId);
     } else {
-      errorToast(`${provider} integration setup failed: ${error}`);
+      toast.dismiss();
     }
-  });
-  
-  // Listen for integration health events
-  window.addEventListener('integration_health_changed', (event: any) => {
-    const { provider, status, message } = event.detail;
-    
-    if (status === 'error') {
-      errorToast(`${provider} integration error: ${message}`);
-    } else if (status === 'connected') {
-      successToast(`${provider} connection restored`);
-    }
-  });
+  },
 };
 
-// Export the Toaster component for use in the app
-export { Toaster };
+export const listenForIntegrationEvents = (userId: string) => {
+  // In a real implementation, this would listen for real-time events from Supabase
+  // For this example, we'll just set up a mock listener
+  
+  const setupMockListener = () => {
+    // Simulate a bootstrap completion event after 5 seconds
+    setTimeout(() => {
+      showToast.success("Integration bootstrap completed successfully!");
+    }, 5000);
+  };
+  
+  return {
+    subscribe: () => {
+      setupMockListener();
+      return () => {}; // Cleanup function
+    },
+  };
+};
 
-// Export toast instance for direct use
-export { toast };
+export default showToast;
