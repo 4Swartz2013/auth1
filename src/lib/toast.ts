@@ -51,3 +51,5 @@ export const listenForIntegrationEvents = () => {
 
 export { Toaster };
 export default toast;
+
+export { toast }
