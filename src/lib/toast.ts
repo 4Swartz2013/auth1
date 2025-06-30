@@ -51,3 +51,5 @@ export const listenForIntegrationEvents = (userId: string) => {
 };
 
 export default showToast;
+
+export { toast }
