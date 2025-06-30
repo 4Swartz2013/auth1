@@ -153,3 +153,5 @@ export abstract class BaseIntegrationProvider implements IntegrationProvider {
     return `${baseUrl}${path}`;
   }
 }
+
+export { BaseIntegrationProvider }
