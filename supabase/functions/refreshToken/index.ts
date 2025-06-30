@@ -1,6 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js";
-import AES from "npm:crypto-js/aes";
-import Utf8 from "npm:crypto-js/enc-utf8";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import CryptoJS from "npm:crypto-js@4.1.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,7 +55,7 @@ Deno.serve(async (req) => {
 
     // Decrypt the refresh token
     const refreshToken = credential.refresh_token
-      ? AES.decrypt(credential.refresh_token, encryptionKey).toString(Utf8)
+      ? CryptoJS.AES.decrypt(credential.refresh_token, encryptionKey).toString(CryptoJS.enc.Utf8)
       : null;
 
     if (!refreshToken) {
@@ -70,8 +69,8 @@ Deno.serve(async (req) => {
     const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString(); // 1 hour from now
 
     // Encrypt the new tokens
-    const encryptedAccessToken = AES.encrypt(newAccessToken, encryptionKey).toString();
-    const encryptedRefreshToken = AES.encrypt(newRefreshToken, encryptionKey).toString();
+    const encryptedAccessToken = CryptoJS.AES.encrypt(newAccessToken, encryptionKey).toString();
+    const encryptedRefreshToken = CryptoJS.AES.encrypt(newRefreshToken, encryptionKey).toString();
 
     // Update the credential in the database
     const { error: updateError } = await supabase

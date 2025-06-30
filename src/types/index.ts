@@ -21,6 +21,22 @@ export interface ConnectedPlatform {
   additionalData?: Record<string, any>;
 }
 
+export interface Integration {
+  id: string;
+  userId: string;
+  workspaceId?: string;
+  providerKey: string;
+  providerName: string;
+  status: 'pending' | 'connected' | 'error' | 'disconnected';
+  lastSyncAt?: string;
+  nextSyncAt?: string;
+  healthScore: number;
+  errorMessage?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface IntegrationState {
   connectedPlatforms: Map<string, ConnectedPlatform>;
   loadingProviders: Set<string>;

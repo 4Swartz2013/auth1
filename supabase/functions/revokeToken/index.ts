@@ -1,6 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js";
-import AES from "npm:crypto-js/aes";
-import Utf8 from "npm:crypto-js/enc-utf8";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import CryptoJS from "npm:crypto-js@4.1.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

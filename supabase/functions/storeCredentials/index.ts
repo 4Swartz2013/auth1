@@ -1,6 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js";
-import AES from "npm:crypto-js/aes";
-import Utf8 from "npm:crypto-js/enc-utf8";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import CryptoJS from "npm:crypto-js@4.1.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,19 +54,19 @@ Deno.serve(async (req) => {
 
     // Encrypt sensitive data
     const encryptedAccessToken = accessToken 
-      ? AES.encrypt(accessToken, encryptionKey).toString() 
+      ? CryptoJS.AES.encrypt(accessToken, encryptionKey).toString() 
       : null;
     
     const encryptedRefreshToken = refreshToken 
-      ? AES.encrypt(refreshToken, encryptionKey).toString() 
+      ? CryptoJS.AES.encrypt(refreshToken, encryptionKey).toString() 
       : null;
     
     const encryptedApiKey = apiKey 
-      ? AES.encrypt(apiKey, encryptionKey).toString() 
+      ? CryptoJS.AES.encrypt(apiKey, encryptionKey).toString() 
       : null;
     
     const encryptedApiSecret = apiSecret 
-      ? AES.encrypt(apiSecret, encryptionKey).toString() 
+      ? CryptoJS.AES.encrypt(apiSecret, encryptionKey).toString() 
       : null;
 
     // Upsert the credential

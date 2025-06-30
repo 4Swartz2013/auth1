@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { Integration } from '../types';
 
 export interface DatabaseCredential {
   id: string;
@@ -134,6 +135,40 @@ export class CredentialManager {
       return data || [];
     } catch (error) {
       console.error('Error in getCredentials:', error);
+      return [];
+    }
+  }
+
+  static async getIntegrations(userId: string): Promise<Integration[]> {
+    try {
+      const { data, error } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching integrations:', error);
+        return [];
+      }
+
+      return (data || []).map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        workspaceId: item.workspace_id,
+        providerKey: item.provider_key,
+        providerName: item.provider_name,
+        status: item.status,
+        lastSyncAt: item.last_sync_at,
+        nextSyncAt: item.next_sync_at,
+        healthScore: item.health_score,
+        errorMessage: item.error_message,
+        metadata: item.metadata,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at
+      }));
+    } catch (error) {
+      console.error('Error in getIntegrations:', error);
       return [];
     }
   }

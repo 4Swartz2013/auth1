@@ -1,24 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { IntegrationState, ConnectedPlatform } from '../types';
+import { IntegrationState, ConnectedPlatform, Integration } from '../types';
 import { CredentialManager, DatabaseCredential, IntegrationLog } from '../lib/credentialManager';
 import { toast } from '../lib/toast';
-
-interface Integration {
-  id: string;
-  userId: string;
-  workspaceId?: string;
-  providerKey: string;
-  providerName: string;
-  status: 'pending' | 'connected' | 'error' | 'disconnected';
-  lastSyncAt?: string;
-  nextSyncAt?: string;
-  healthScore: number;
-  errorMessage?: string;
-  metadata?: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface ExtendedIntegrationState extends IntegrationState {
   currentUserId: string | null;
@@ -106,20 +90,10 @@ export const useIntegrationStore = create<ExtendedIntegrationState>()(
         set({ isLoadingIntegrations: true, error: null });
 
         try {
-          const response = await fetch('/api/integrations', {
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to fetch integrations');
-          }
-
-          const data = await response.json();
+          const integrations = await CredentialManager.getIntegrations(currentUserId);
           const integrationsMap = new Map<string, Integration>();
           
-          data.forEach((integration: Integration) => {
+          integrations.forEach((integration: Integration) => {
             integrationsMap.set(integration.id, integration);
           });
 
@@ -338,20 +312,11 @@ export const useIntegrationStore = create<ExtendedIntegrationState>()(
           return integration;
         }
         
-        // If not in local state, fetch from API
+        // If not in local state, try to reload from database
         try {
-          const response = await fetch(`/api/integrations/${integrationId}`, {
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to fetch integration details');
-          }
-
-          const data = await response.json();
-          return data;
+          await get().loadIntegrationsFromDatabase();
+          const updatedIntegrations = get().integrations;
+          return updatedIntegrations.get(integrationId) || null;
         } catch (error) {
           console.error('Error fetching integration details:', error);
           return null;
