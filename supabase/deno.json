@@ -1,8 +1,8 @@
 {
   "imports": {
     "npm:@supabase/supabase-js": "npm:@supabase/supabase-js@2.39.0",
-    "npm:crypto-js/aes": "npm:crypto-js@4.1.1/aes",
-    "npm:crypto-js/enc-utf8": "npm:crypto-js@4.1.1/enc-utf8"
+    "npm:crypto-js": "npm:crypto-js@4.1.1",
+    "npm:zod": "npm:zod@3.22.4"
   },
   "tasks": {
     "start": "deno run --allow-net --allow-env --allow-read main.ts"
