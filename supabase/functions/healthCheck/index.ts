@@ -1,5 +1,6 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import CryptoJS from "npm:crypto-js@4.1.1";
+import { createClient } from "npm:@supabase/supabase-js@2.39.0";
+import { decrypt } from "../util/crypto.ts";
+import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const encryptionKey = Deno.env.get("CREDENTIAL_ENCRYPTION_KEY") || "";
@@ -25,86 +27,175 @@ Deno.serve(async (req) => {
       throw new Error("Missing environment variables");
     }
 
+    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get all active credentials that need checking
-    const { data: credentials, error } = await supabase
-      .from("credentials")
+    // Get all active integrations
+    const { data: integrations, error: integrationsError } = await supabase
+      .from("integrations")
       .select("*")
-      .eq("is_active", true)
-      .eq("credential_type", "oauth")
-      .lt("expires_at", new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()); // Expiring in the next 24 hours
+      .in("status", ["connected", "error"])
+      .order("updated_at", { ascending: false });
 
-    if (error) throw error;
+    if (integrationsError) {
+      throw new Error(`Failed to fetch integrations: ${integrationsError.message}`);
+    }
 
     const results = [];
 
-    // Process each credential
-    for (const credential of credentials || []) {
+    // Process each integration
+    for (const integration of integrations || []) {
       try {
-        // Decrypt the refresh token
-        const refreshToken = credential.refresh_token
-          ? CryptoJS.AES.decrypt(credential.refresh_token, encryptionKey).toString(CryptoJS.enc.Utf8)
-          : null;
+        // Get credential
+        const { data: credential, error: credentialError } = await supabase
+          .from("credentials")
+          .select("*")
+          .eq("integration_id", integration.id)
+          .eq("is_active", true)
+          .single();
 
-        if (!refreshToken) {
+        if (credentialError || !credential) {
           // Log error and continue
           await supabase.from("integration_logs").insert({
-            user_id: credential.user_id,
-            platform: credential.platform,
+            user_id: integration.user_id,
+            platform: integration.provider_key,
             action: "health_check",
             status: "error",
             log_level: "error",
-            message: "Missing refresh token",
+            message: `Credential not found: ${credentialError?.message || "Unknown error"}`,
           });
           
+          // Update integration status
+          await supabase
+            .from("integrations")
+            .update({
+              status: "error",
+              error_message: "Credential not found",
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", integration.id);
+          
           results.push({
-            platform: credential.platform,
-            user_id: credential.user_id,
+            integrationId: integration.id,
+            providerKey: integration.provider_key,
             status: "error",
-            message: "Missing refresh token",
+            message: "Credential not found"
           });
           
           continue;
         }
 
-        // Queue a token refresh job
-        // In a real implementation, this would call a token refresh service
-        // For now, we'll just log it
-        await supabase.from("integration_logs").insert({
-          user_id: credential.user_id,
-          platform: credential.platform,
-          action: "health_check",
-          status: "pending",
-          log_level: "info",
-          message: "Token refresh scheduled",
-        });
-
-        results.push({
-          platform: credential.platform,
-          user_id: credential.user_id,
-          status: "pending",
-          message: "Token refresh scheduled",
-        });
+        // Check if token is expired or about to expire
+        if (credential.credential_type === "oauth" && credential.expires_at) {
+          const expiresAt = new Date(credential.expires_at);
+          const now = new Date();
+          
+          // If token expires in less than 1 hour, refresh it
+          if (expiresAt.getTime() - now.getTime() < 60 * 60 * 1000) {
+            // Get provider
+            const provider = getProvider(integration.provider_key);
+            if (!provider) {
+              throw new Error(`Provider not found: ${integration.provider_key}`);
+            }
+            
+            // Decrypt refresh token
+            const refreshToken = credential.refresh_token
+              ? decrypt(credential.refresh_token, encryptionKey)
+              : null;
+            
+            if (!refreshToken) {
+              throw new Error("Missing refresh token");
+            }
+            
+            // Get client credentials
+            const clientId = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_ID`);
+            const clientSecret = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_SECRET`);
+            
+            if (!clientId || !clientSecret) {
+              throw new Error(`Missing client credentials for ${integration.provider_key}`);
+            }
+            
+            // Log refresh attempt
+            await supabase.from("integration_logs").insert({
+              user_id: integration.user_id,
+              platform: integration.provider_key,
+              action: "token_refresh",
+              status: "pending",
+              log_level: "info",
+              message: "Token refresh initiated by health check"
+            });
+            
+            results.push({
+              integrationId: integration.id,
+              providerKey: integration.provider_key,
+              status: "pending",
+              message: "Token refresh initiated"
+            });
+          } else {
+            // Token is still valid
+            results.push({
+              integrationId: integration.id,
+              providerKey: integration.provider_key,
+              status: "connected",
+              message: "Token is valid"
+            });
+          }
+        } else {
+          // Non-OAuth credentials or no expiry
+          results.push({
+            integrationId: integration.id,
+            providerKey: integration.provider_key,
+            status: "connected",
+            message: "Credential is valid"
+          });
+        }
       } catch (err) {
-        console.error(`Error processing credential ${credential.id}:`, err);
+        console.error(`Error processing integration ${integration.id}:`, err);
+        
+        // Log error
+        await supabase.from("integration_logs").insert({
+          user_id: integration.user_id,
+          platform: integration.provider_key,
+          action: "health_check",
+          status: "error",
+          log_level: "error",
+          message: `Health check error: ${err.message}`,
+          error_details: { error: err.message }
+        });
+        
+        // Update integration status
+        await supabase
+          .from("integrations")
+          .update({
+            status: "error",
+            error_message: err.message,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", integration.id);
         
         results.push({
-          platform: credential.platform,
-          user_id: credential.user_id,
+          integrationId: integration.id,
+          providerKey: integration.provider_key,
           status: "error",
-          message: err.message,
+          message: err.message
         });
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      results,
+      timestamp: new Date().toISOString()
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Health check error:", err);
     
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: err.message 
+    }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -1,4 +1,4 @@
-import toast from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 
 const defaultOptions = {
   duration: 5000,
@@ -31,25 +31,23 @@ export const showToast = {
   },
 };
 
-export const listenForIntegrationEvents = (userId: string) => {
-  // In a real implementation, this would listen for real-time events from Supabase
-  // For this example, we'll just set up a mock listener
+export const listenForIntegrationEvents = () => {
+  // Listen for integration bootstrap events
+  window.addEventListener('integration_bootstrapped', (event: any) => {
+    const { provider, success } = event.detail;
+    
+    if (success) {
+      showToast.success(`${provider} integration setup completed successfully!`);
+    } else {
+      showToast.error(`${provider} integration setup failed. Please try again.`);
+    }
+  });
   
-  const setupMockListener = () => {
-    // Simulate a bootstrap completion event after 5 seconds
-    setTimeout(() => {
-      showToast.success("Integration bootstrap completed successfully!");
-    }, 5000);
-  };
-  
-  return {
-    subscribe: () => {
-      setupMockListener();
-      return () => {}; // Cleanup function
-    },
+  // Return cleanup function
+  return () => {
+    window.removeEventListener('integration_bootstrapped', () => {});
   };
 };
 
-export default showToast;
-
-export { toast }
+export { Toaster };
+export default toast;

@@ -1,5 +1,5 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import CryptoJS from "npm:crypto-js@4.1.1";
+import { createClient } from "npm:@supabase/supabase-js@2.39.0";
+import { encrypt } from "../util/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const encryptionKey = Deno.env.get("CREDENTIAL_ENCRYPTION_KEY") || "";
@@ -33,49 +34,88 @@ Deno.serve(async (req) => {
       throw new Error("Missing environment variables");
     }
 
+    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get request body
     const { 
       userId, 
-      platform, 
-      platformName, 
+      providerKey, 
+      providerName, 
       credentialType, 
       accessToken, 
       refreshToken, 
       apiKey, 
       apiSecret, 
-      additionalData, 
-      scopes, 
-      expiresAt 
+      expiresAt,
+      additionalData,
+      scopes,
+      workspaceId
     } = await req.json();
 
-    if (!userId || !platform || !platformName || !credentialType) {
+    // Validate required parameters
+    if (!userId || !providerKey || !providerName || !credentialType) {
       throw new Error("Missing required parameters");
+    }
+
+    // Verify user exists
+    const { data: user, error: userError } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("id", userId)
+      .single();
+
+    if (userError || !user) {
+      throw new Error(`User not found: ${userError?.message || "Unknown error"}`);
+    }
+
+    // Create or update integration record
+    const { data: integration, error: integrationError } = await supabase
+      .from("integrations")
+      .upsert({
+        user_id: userId,
+        workspace_id: workspaceId,
+        provider_key: providerKey,
+        provider_name: providerName,
+        status: "pending",
+        health_score: 100,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: "user_id,provider_key,workspace_id",
+        returning: "representation"
+      })
+      .select()
+      .single();
+
+    if (integrationError) {
+      throw new Error(`Failed to create integration: ${integrationError.message}`);
     }
 
     // Encrypt sensitive data
     const encryptedAccessToken = accessToken 
-      ? CryptoJS.AES.encrypt(accessToken, encryptionKey).toString() 
+      ? encrypt(accessToken, encryptionKey)
       : null;
     
     const encryptedRefreshToken = refreshToken 
-      ? CryptoJS.AES.encrypt(refreshToken, encryptionKey).toString() 
+      ? encrypt(refreshToken, encryptionKey)
       : null;
     
     const encryptedApiKey = apiKey 
-      ? CryptoJS.AES.encrypt(apiKey, encryptionKey).toString() 
+      ? encrypt(apiKey, encryptionKey)
       : null;
     
     const encryptedApiSecret = apiSecret 
-      ? CryptoJS.AES.encrypt(apiSecret, encryptionKey).toString() 
+      ? encrypt(apiSecret, encryptionKey)
       : null;
 
-    // Upsert the credential
-    const { error } = await supabase
+    // Store credentials
+    const { error: credentialError } = await supabase
       .from("credentials")
       .upsert({
         user_id: userId,
-        platform,
-        platform_name: platformName,
+        platform: providerKey,
+        platform_name: providerName,
         credential_type: credentialType,
         access_token: encryptedAccessToken,
         refresh_token: encryptedRefreshToken,
@@ -86,47 +126,58 @@ Deno.serve(async (req) => {
         expires_at: expiresAt,
         status: "connected",
         is_active: true,
+        integration_id: integration.id,
         last_used_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
         onConflict: "user_id,platform"
       });
 
-    if (error) {
-      throw new Error(`Failed to store credential: ${error.message}`);
+    if (credentialError) {
+      throw new Error(`Failed to store credential: ${credentialError.message}`);
     }
 
     // Log the credential storage
     await supabase.from("integration_logs").insert({
       user_id: userId,
-      platform,
+      platform: providerKey,
       action: "store_credential",
       status: "connected",
       log_level: "info",
-      message: `Successfully stored ${credentialType} credential for ${platformName}`,
+      message: `Successfully stored ${credentialType} credential for ${providerName}`,
     });
 
-    // Queue a bootstrap job if needed
-    if (credentialType === "oauth" && accessToken) {
-      // In a real implementation, this would queue a job to bootstrap the integration
-      // For this example, we'll just log it
-      await supabase.from("integration_logs").insert({
-        user_id: userId,
-        platform,
-        action: "bootstrap_queued",
+    // Create a bootstrap job
+    const { data: job, error: jobError } = await supabase
+      .from("integration_sync_jobs")
+      .insert({
+        integration_id: integration.id,
+        job_type: "bootstrap",
         status: "pending",
-        log_level: "info",
-        message: "Bootstrap job queued",
-      });
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (jobError) {
+      console.error("Failed to create bootstrap job:", jobError);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      integrationId: integration.id,
+      jobId: job?.id
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Store credentials error:", err);
     
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: err.message 
+    }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

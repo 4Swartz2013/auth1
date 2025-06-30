@@ -9,7 +9,7 @@ interface HealthDrawerProps {
   providerKey: string;
   providerName: string;
   onClose: () => void;
-  onRefresh?: () => void;
+  onRefresh?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const HealthDrawer: React.FC<HealthDrawerProps> = ({ 

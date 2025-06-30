@@ -1,5 +1,6 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import CryptoJS from "npm:crypto-js@4.1.1";
+import { createClient } from "npm:@supabase/supabase-js@2.39.0";
+import { decrypt } from "../util/crypto.ts";
+import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +26,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const encryptionKey = Deno.env.get("CREDENTIAL_ENCRYPTION_KEY") || "";
@@ -33,47 +35,108 @@ Deno.serve(async (req) => {
       throw new Error("Missing environment variables");
     }
 
+    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { userId, platform } = await req.json();
 
-    if (!userId || !platform) {
-      throw new Error("Missing required parameters: userId and platform");
+    // Get request body
+    const { integrationId, userId } = await req.json();
+
+    if (!integrationId || !userId) {
+      throw new Error("Missing required parameters: integrationId and userId");
     }
 
-    // Get the credential
-    const { data: credential, error } = await supabase
-      .from("credentials")
+    // Get integration details
+    const { data: integration, error: integrationError } = await supabase
+      .from("integrations")
       .select("*")
+      .eq("id", integrationId)
       .eq("user_id", userId)
-      .eq("platform", platform)
-      .eq("is_active", true)
       .single();
 
-    if (error || !credential) {
-      throw new Error(`Credential not found: ${error?.message || "Unknown error"}`);
+    if (integrationError || !integration) {
+      throw new Error(`Integration not found: ${integrationError?.message || "Unknown error"}`);
     }
 
-    // In a real implementation, this would call the provider's token revocation API
-    // For this example, we'll just mark the credential as inactive
+    // Get credential
+    const { data: credential, error: credentialError } = await supabase
+      .from("credentials")
+      .select("*")
+      .eq("integration_id", integrationId)
+      .eq("user_id", userId)
+      .single();
 
-    // Update the credential in the database
-    const { error: updateError } = await supabase
+    if (credentialError || !credential) {
+      throw new Error(`Credential not found: ${credentialError?.message || "Unknown error"}`);
+    }
+
+    // Get provider configuration
+    const provider = getProvider(integration.provider_key);
+    if (!provider) {
+      throw new Error(`Provider not found: ${integration.provider_key}`);
+    }
+
+    // Decrypt tokens
+    const accessToken = credential.access_token
+      ? decrypt(credential.access_token, encryptionKey)
+      : null;
+    
+    const refreshToken = credential.refresh_token
+      ? decrypt(credential.refresh_token, encryptionKey)
+      : null;
+
+    // Get client credentials from environment
+    const clientId = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_ID`);
+    const clientSecret = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_SECRET`);
+
+    // Revoke the token with the provider
+    // Note: We'll proceed even if this fails, to ensure we clean up our database
+    try {
+      if (accessToken) {
+        await provider.revokeAccess({
+          userId,
+          integrationId,
+          accessToken,
+          refreshToken,
+          clientId,
+          clientSecret
+        });
+      }
+    } catch (revokeError) {
+      console.error("Provider revoke error:", revokeError);
+      // Continue with local cleanup
+    }
+
+    // Update credential
+    const { error: updateCredentialError } = await supabase
       .from("credentials")
       .update({
         is_active: false,
         status: "disconnected",
-        updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .eq("id", credential.id);
 
-    if (updateError) {
-      throw new Error(`Failed to update credential: ${updateError.message}`);
+    if (updateCredentialError) {
+      throw new Error(`Failed to update credential: ${updateCredentialError.message}`);
+    }
+
+    // Update integration status
+    const { error: updateIntegrationError } = await supabase
+      .from("integrations")
+      .update({
+        status: "disconnected",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", integrationId);
+
+    if (updateIntegrationError) {
+      throw new Error(`Failed to update integration: ${updateIntegrationError.message}`);
     }
 
     // Log the revocation
     await supabase.from("integration_logs").insert({
       user_id: userId,
-      platform,
+      platform: integration.provider_key,
       action: "revoke_token",
       status: "disconnected",
       log_level: "info",
@@ -86,7 +149,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("Token revocation error:", err);
     
-    return new Response(JSON.stringify({ success: false, error: err.message }), {
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: err.message 
+    }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
