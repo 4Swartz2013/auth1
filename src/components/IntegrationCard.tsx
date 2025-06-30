@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Plug, ExternalLink, Info, Loader2, Settings, AlertTriangle } from 'lucide-react';
 import { Provider } from '../types';
 import { useIntegrationStore } from '../store/integrationStore';
-import { OAuthManager } from '../lib/oauthManager';
-import ManualSetupModal from './ManualSetupModal';
+import ConnectModal from './ConnectModal';
+import HealthDrawer from './HealthDrawer';
+import FixButton from './FixButton';
 
 interface IntegrationCardProps {
   provider: Provider;
@@ -17,10 +18,12 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     loadingProviders, 
     saveCredentialToDatabase,
     deleteCredentialFromDatabase,
-    currentUserId 
+    currentUserId,
+    integrations
   } = useIntegrationStore();
   
-  const [showManualSetup, setShowManualSetup] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showHealthDrawer, setShowHealthDrawer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const connected = isConnected(provider.key);
@@ -32,64 +35,19 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
   
   const loading = safeLoadingProviders.has(provider.key);
 
-  const handleConnect = async () => {
+  // Find integration for this provider
+  const integration = Array.from(integrations.values()).find(i => i.providerKey === provider.key);
+  const integrationStatus = integration?.status || (connected ? 'connected' : 'disconnected');
+  const hasError = integrationStatus === 'error';
+
+  const handleConnect = () => {
     if (!currentUserId) {
       setError('Please sign in to connect platforms');
       return;
     }
 
     setError(null);
-    
-    if (provider.authType === 'oauth') {
-      setLoading(provider.key, true);
-      
-      try {
-        // Check if OAuth is properly configured
-        const clientIdEnvKey = `VITE_${provider.providerId?.toUpperCase()}_CLIENT_ID`;
-        const clientId = import.meta.env[clientIdEnvKey];
-        
-        if (!clientId) {
-          setError(`OAuth not configured for ${provider.name}. Please set up ${clientIdEnvKey} in your environment variables.`);
-          setLoading(provider.key, false);
-          return;
-        }
-
-        // Initiate OAuth flow
-        OAuthManager.initiateOAuth(provider);
-        
-        // Simulate OAuth completion for demo purposes
-        // In production, this would be handled by the OAuth callback
-        setTimeout(async () => {
-          const success = await saveCredentialToDatabase(
-            provider.key,
-            provider.name,
-            {
-              type: 'oauth',
-              accessToken: `demo_token_${provider.key}_${Date.now()}`,
-              refreshToken: `demo_refresh_${provider.key}_${Date.now()}`,
-              expiresAt: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
-              additionalData: {
-                scopes: provider.scopes || [],
-                providerId: provider.providerId
-              }
-            }
-          );
-
-          if (!success) {
-            setError('Failed to save credentials. Please try again.');
-          }
-          
-          setLoading(provider.key, false);
-        }, 2000);
-        
-      } catch (error) {
-        console.error('OAuth error:', error);
-        setError('Failed to initiate OAuth. Please try again.');
-        setLoading(provider.key, false);
-      }
-    } else {
-      setShowManualSetup(true);
-    }
+    setShowConnectModal(true);
   };
 
   const handleDisconnect = async () => {
@@ -106,29 +64,10 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     setLoading(provider.key, false);
   };
 
-  const handleManualSetupComplete = async (credentialData: {
-    apiKey?: string;
-    apiSecret?: string;
-    additionalData?: Record<string, any>;
-  }) => {
-    if (!currentUserId) return false;
-
-    const success = await saveCredentialToDatabase(
-      provider.key,
-      provider.name,
-      {
-        type: 'manual',
-        apiKey: credentialData.apiKey,
-        apiSecret: credentialData.apiSecret,
-        additionalData: credentialData.additionalData
-      }
-    );
-
-    if (success) {
-      setShowManualSetup(false);
+  const handleViewHealth = () => {
+    if (integration) {
+      setShowHealthDrawer(true);
     }
-
-    return success;
   };
 
   return (
@@ -158,11 +97,19 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
         
         {/* Connection Status */}
         <div className={`flex items-center gap-2 text-sm font-medium mb-4 p-2 px-3 rounded-full ${
-          connected ? 'bg-green-600/30 text-green-400' : 
-          (provider.authType === 'oauth' ? 'bg-red-600/30 text-red-400' : 'bg-yellow-600/30 text-yellow-400')
+          integrationStatus === 'connected' ? 'bg-green-600/30 text-green-400' : 
+          integrationStatus === 'error' ? 'bg-red-600/30 text-red-400' :
+          integrationStatus === 'pending' ? 'bg-yellow-600/30 text-yellow-400' :
+          'bg-gray-600/30 text-gray-400'
         }`}>
-          {connected ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {connected ? 'Connected' : (provider.authType === 'oauth' ? 'Not Connected' : 'Manual Setup Required')}
+          {integrationStatus === 'connected' ? <CheckCircle className="w-4 h-4" /> : 
+           integrationStatus === 'error' ? <AlertTriangle className="w-4 h-4" /> :
+           integrationStatus === 'pending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+           <XCircle className="w-4 h-4" />}
+          {integrationStatus === 'connected' ? 'Connected' : 
+           integrationStatus === 'error' ? 'Error' :
+           integrationStatus === 'pending' ? 'Setting up...' :
+           'Not Connected'}
         </div>
 
         {/* Error Display */}
@@ -195,7 +142,15 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             </button>
           )}
           
-          {connected && (
+          {connected && hasError && (
+            <FixButton 
+              integrationId={integration!.id} 
+              providerKey={provider.key}
+              errorMessage={integration?.errorMessage}
+            />
+          )}
+          
+          {connected && !hasError && (
             <button
               onClick={handleDisconnect}
               className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
@@ -212,12 +167,22 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             </button>
           )}
           
+          {connected && (
+            <button
+              onClick={handleViewHealth}
+              className="w-full px-4 py-2 text-blue-400 hover:text-blue-300 text-sm flex items-center justify-center gap-1 border border-blue-400/30 rounded-lg hover:border-blue-400/50 transition-colors"
+            >
+              <Info className="w-3 h-3" />
+              View Health & Logs
+            </button>
+          )}
+          
           {provider.docsUrl && (
             <a 
               href={provider.docsUrl} 
               target="_blank" 
               rel="noopener noreferrer" 
-              className="w-full px-4 py-2 text-blue-400 hover:text-blue-300 text-sm flex items-center justify-center gap-1 border border-blue-400/30 rounded-lg hover:border-blue-400/50 transition-colors"
+              className="w-full px-4 py-2 text-gray-400 hover:text-gray-300 text-sm flex items-center justify-center gap-1 border border-gray-600/30 rounded-lg hover:border-gray-600/50 transition-colors"
             >
               <ExternalLink className="w-3 h-3" />
               API Documentation
@@ -226,11 +191,23 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
         </div>
       </motion.div>
 
-      {showManualSetup && (
-        <ManualSetupModal
+      {showConnectModal && (
+        <ConnectModal
           provider={provider}
-          onClose={() => setShowManualSetup(false)}
-          onSave={handleManualSetupComplete}
+          onClose={() => setShowConnectModal(false)}
+        />
+      )}
+
+      {showHealthDrawer && integration && (
+        <HealthDrawer
+          integrationId={integration.id}
+          providerKey={provider.key}
+          providerName={provider.name}
+          onClose={() => setShowHealthDrawer(false)}
+          onRefresh={() => {
+            // Implement refresh logic
+            return useIntegrationStore.getState().refreshIntegration(integration.id);
+          }}
         />
       )}
     </>

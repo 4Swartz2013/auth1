@@ -1,0 +1,10 @@
+# Logflare configuration for Supabase
+[logflare]
+api_key = "${LOGFLARE_API_KEY}"
+source_id = "${LOGFLARE_SOURCE_ID}"
+endpoint = "https://api.logflare.app"
+
+# Enable log forwarding
+[log_forwarding]
+enabled = true
+destination = "logflare"
