@@ -12,6 +12,7 @@ import {
   Globe,
   Database,
   Zap,
+  GitBranch,
   Settings,
   CheckCircle,
   AlertTriangle,
