@@ -75,6 +75,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     updateWorkflow,
     addNode,
     addEdge: addWorkflowEdge,
+    updateNode,
     setSelectedNode,
     setConfigPanelOpen,
     workflows
