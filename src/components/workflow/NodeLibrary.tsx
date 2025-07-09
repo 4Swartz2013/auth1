@@ -192,6 +192,18 @@ const NodeLibrary: React.FC<NodeLibraryProps> = ({ onSelectNode, onClose, integr
   const handleSelectNode = (template: NodeTemplate) => {
     onSelectNode(template);
   };
+  
+  // Add conditional node template if not already in the list
+  const hasConditionalTemplate = nodeTemplates.some(t => t.type === 'condition');
+  if (!hasConditionalTemplate) {
+    nodeTemplates.push({
+      type: 'condition',
+      label: 'Conditional',
+      description: 'Add conditional logic that executes different paths based on conditions',
+      icon: '🔀',
+      category: 'logic'
+    });
+  }
 
   const getNodeIcon = (template: NodeTemplate) => {
     if (typeof template.icon === 'string') {
