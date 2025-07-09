@@ -94,7 +94,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'published' | 'testing'>('draft');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [viewLocked, setViewLocked] = useState(true);
+  const [editMode, setEditMode] = useState(false);
   const [nodeSpacing] = useState(150); // Vertical spacing between nodes
 
   const reactFlowInstance = useReactFlow();
@@ -120,7 +120,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           },
           isConditional: node.type === 'condition'
         },
-        draggable: !viewLocked
+        draggable: editMode
       }));
       
       // Create edges connecting nodes vertically
@@ -161,16 +161,18 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
       setWorkflowStatus(currentWorkflow.status as any);
       
       // Auto-position nodes if needed
-      if (flowNodes.length > 0 && viewLocked) {
+      if (flowNodes.length > 0 && !editMode) {
         setTimeout(() => {
           autoArrangeNodes();
         }, 100);
       }
     }
-  }, [currentWorkflow, setNodes, setEdges, setSelectedNode, setConfigPanelOpen, viewLocked]);
+  }, [currentWorkflow, setNodes, setEdges, setSelectedNode, setConfigPanelOpen, editMode]);
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (!editMode) return; // Only allow connections in edit mode
+      
       const newEdge = {
         ...params,
         ...edgeOptions
@@ -187,7 +189,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         });
       }
     },
-    [setEdges, addWorkflowEdge]
+    [setEdges, addWorkflowEdge, editMode]
   );
 
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -282,7 +284,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
       nodes.map(node => ({
         ...node,
         position: positions[node.id] || node.position,
-        draggable: !viewLocked
+        draggable: editMode
       }))
     );
     
@@ -297,20 +299,20 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     autoArrangeNodes();
   };
 
-  // Function to toggle view lock
-  const toggleViewLock = () => {
-    setViewLocked(!viewLocked);
+  // Function to toggle edit mode
+  const toggleEditMode = () => {
+    setEditMode(!editMode);
     
     // Update node draggability
     setNodes(nodes => 
       nodes.map(node => ({
         ...node,
-        draggable: viewLocked // Inverse of current viewLocked state
+        draggable: !editMode // Inverse of current editMode state
       }))
     );
     
-    // If locking the view, auto-arrange nodes
-    if (!viewLocked) {
+    // If exiting edit mode, auto-arrange nodes
+    if (editMode) {
       autoArrangeNodes();
     }
   };
@@ -409,7 +411,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     setAddNodeBranch(null);
     
     // Auto-arrange nodes if view is locked
-    if (viewLocked) {
+    if (!editMode) {
       setTimeout(() => {
         autoArrangeNodes();
       }, 100);
@@ -571,27 +573,22 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* View Lock Toggle */}
-            <button 
-              onClick={toggleViewLock}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                viewLocked 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-gray-100 text-gray-700'
-              }`}
-            >
-              {viewLocked ? (
-                <>
-                  <Lock className="w-4 h-4" />
-                  <span className="text-sm font-medium">View Locked</span>
-                </>
-              ) : (
-                <>
-                  <Unlock className="w-4 h-4" />
-                  <span className="text-sm font-medium">Edit Mode</span>
-                </>
-              )}
-            </button>
+            {/* Edit Mode Toggle */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">Edit Mode</span>
+              <button 
+                onClick={toggleEditMode}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  editMode ? 'bg-green-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    editMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
             
             {/* Tidy Button */}
             <button 
@@ -643,15 +640,15 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               nodeTypes={nodeTypes}
               connectionMode={ConnectionMode.Loose}
               fitView
-              className={`bg-gray-50 ${viewLocked ? 'cursor-default' : 'cursor-grab'}`}
+              className={`bg-gray-50 ${editMode ? 'cursor-grab' : 'cursor-default'}`}
               defaultViewport={{ x: 0, y: 0, zoom: 1 }}
               minZoom={0.3}
               maxZoom={2}
               snapToGrid={true}
               snapGrid={[20, 20]}
               deleteKeyCode={['Backspace', 'Delete']}
-              nodesDraggable={!viewLocked}
-              nodesConnectable={!viewLocked} // Enable connections in edit mode
+              nodesDraggable={editMode}
+              nodesConnectable={editMode} // Enable connections in edit mode
               elementsSelectable={true}
             >
               <Background 

@@ -12,11 +12,11 @@ import {
   Globe,
   Database,
   Zap,
-  GitBranch,
   Settings,
   CheckCircle,
   AlertTriangle,
   Info,
+  GitBranch,
   XCircle
 } from 'lucide-react';
 import { WorkflowNode } from '../../types/workflow';
