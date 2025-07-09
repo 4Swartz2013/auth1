@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Workflow, WorkflowNode, WorkflowEdge } from '../types/workflow';
+import { v4 as uuidv4 } from 'uuid';
 
 interface WorkflowState {
   workflows: Workflow[];
@@ -80,8 +81,10 @@ export const useWorkflowStore = create<WorkflowState>()(
       
       addNode: (node: Omit<WorkflowNode, 'id'>) => {
         const newNode: WorkflowNode = {
-          ...node,
-          id: `node_${Date.now()}`
+          id: node.id || `node_${uuidv4()}`,
+          type: node.type,
+          position: node.position,
+          data: node.data
         };
         
         set((state) => {
@@ -100,6 +103,8 @@ export const useWorkflowStore = create<WorkflowState>()(
             )
           };
         });
+        
+        return newNode;
       },
       
       updateNode: (id: string, updates: Partial<WorkflowNode>) => {
@@ -156,8 +161,12 @@ export const useWorkflowStore = create<WorkflowState>()(
       
       addEdge: (edge: Omit<WorkflowEdge, 'id'>) => {
         const newEdge: WorkflowEdge = {
-          ...edge,
-          id: `edge_${Date.now()}`
+          id: `edge_${uuidv4()}`,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+          type: edge.type || 'default'
         };
         
         set((state) => {

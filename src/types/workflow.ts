@@ -1,6 +1,6 @@
 export interface WorkflowNode {
   id: string;
-  type: 'trigger' | 'action' | 'condition' | 'function' | 'request' | 'response' | 'fanout' | 'delay' | 'resource';
+  type: 'trigger' | 'action' | 'condition' | 'function' | 'request' | 'response' | 'fanout' | 'delay' | 'resource' | string;
   position: { x: number; y: number };
   data: {
     label: string;
@@ -9,7 +9,11 @@ export interface WorkflowNode {
     icon?: string;
     integration?: string;
     config?: Record<string, any>;
-    status?: 'idle' | 'running' | 'success' | 'error';
+    status?: 'idle' | 'running' | 'success' | 'error' | string;
+    nodeType?: string;
+    isConditional?: boolean;
+    onAddNodeBelow?: (nodeId: string) => void;
+    onConfigClick?: () => void;
   };
 }
 
@@ -17,7 +21,7 @@ export interface WorkflowEdge {
   id: string;
   source: string;
   target: string;
-  type?: 'default' | 'conditional';
+  type?: 'default' | 'conditional' | string;
   label?: string;
   sourceHandle?: string;
   targetHandle?: string;

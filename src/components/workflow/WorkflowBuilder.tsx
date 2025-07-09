@@ -13,7 +13,8 @@ import ReactFlow, {
   ReactFlowProvider,
   useReactFlow,
   ConnectionMode,
-  MarkerType
+  MarkerType,
+  Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { 
@@ -38,6 +39,7 @@ import {
   Pause,
   RotateCcw
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { useWorkflowStore } from '../../store/workflowStore';
 import CustomNode from './CustomNode';
 import NodeConfigPanel from './NodeConfigPanel';
@@ -46,6 +48,7 @@ import WorkflowSidebar from './WorkflowSidebar';
 
 const nodeTypes = {
   custom: CustomNode,
+  conditional: CustomNode,
 };
 
 const edgeOptions = {
@@ -86,6 +89,8 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'published' | 'testing'>('draft');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [viewLocked, setViewLocked] = useState(true);
+  const [nodeSpacing] = useState(150); // Vertical spacing between nodes
 
   const reactFlowInstance = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -93,12 +98,13 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   // Initialize nodes and edges from current workflow
   useEffect(() => {
     if (currentWorkflow) {
-      const flowNodes = currentWorkflow.nodes.map((node, index) => ({
+      const flowNodes = currentWorkflow.nodes.map((node) => ({
         id: node.id,
-        type: 'custom',
+        type: node.type === 'condition' ? 'conditional' : 'custom',
         position: node.position,
         data: {
           ...node.data,
+          nodeType: node.type,
           onConfigClick: () => {
             setSelectedNode(node);
             setConfigPanelOpen(true);
@@ -106,32 +112,57 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           onAddNodeBelow: (nodeId: string) => {
             setAddNodeAfter(nodeId);
             setShowNodeLibrary(true);
-          }
+          },
+          isConditional: node.type === 'condition'
         },
-        draggable: true
+        draggable: !viewLocked
       }));
       
       // Create edges connecting nodes vertically
       const flowEdges: Edge[] = [];
-      for (let i = 0; i < flowNodes.length - 1; i++) {
-        const sourceNode = flowNodes[i];
-        const targetNode = flowNodes[i + 1];
-        
-        flowEdges.push({
-          id: `edge-${sourceNode.id}-${targetNode.id}`,
-          source: sourceNode.id,
-          target: targetNode.id,
-          type: 'default',
-          ...edgeOptions
+      
+      // Create edges based on workflow edges
+      if (currentWorkflow.edges && currentWorkflow.edges.length > 0) {
+        currentWorkflow.edges.forEach(edge => {
+          flowEdges.push({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            type: 'default',
+            ...edgeOptions
+          });
         });
+      } else {
+        // Create default edges for backward compatibility
+        for (let i = 0; i < flowNodes.length - 1; i++) {
+          const sourceNode = flowNodes[i];
+          const targetNode = flowNodes[i + 1];
+          
+          flowEdges.push({
+            id: `edge-${sourceNode.id}-${targetNode.id}`,
+            source: sourceNode.id,
+            target: targetNode.id,
+            type: 'default',
+            ...edgeOptions
+          });
+        }
       }
 
       setNodes(flowNodes);
       setEdges(flowEdges);
       setWorkflowName(currentWorkflow.name);
       setWorkflowStatus(currentWorkflow.status as any);
+      
+      // Auto-position nodes if needed
+      if (flowNodes.length > 0 && viewLocked) {
+        setTimeout(() => {
+          autoArrangeNodes();
+        }, 100);
+      }
     }
-  }, [currentWorkflow, setNodes, setEdges, setSelectedNode, setConfigPanelOpen]);
+  }, [currentWorkflow, setNodes, setEdges, setSelectedNode, setConfigPanelOpen, viewLocked]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -167,34 +198,151 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     setConfigPanelOpen(false);
   }, [setSelectedNode, setConfigPanelOpen]);
 
+  // Function to automatically position nodes in a perfect vertical alignment
+  const autoArrangeNodes = () => {
+    if (!currentWorkflow) return;
+    
+    // Create a map of nodes by their IDs for quick lookup
+    const nodeMap = new Map<string, WorkflowNode>();
+    currentWorkflow.nodes.forEach(node => nodeMap.set(node.id, node));
+    
+    // Find root nodes (nodes that are not targets of any edge)
+    const targetNodeIds = new Set(currentWorkflow.edges.map(edge => edge.target));
+    const rootNodeIds = currentWorkflow.nodes
+      .filter(node => !targetNodeIds.has(node.id))
+      .map(node => node.id);
+    
+    // If no root nodes found, use the first node
+    const startNodeIds = rootNodeIds.length > 0 ? rootNodeIds : [currentWorkflow.nodes[0]?.id];
+    
+    // Position map to track node positions
+    const positions: Record<string, { x: number; y: number }> = {};
+    
+    // Process each root node
+    startNodeIds.forEach((startNodeId, rootIndex) => {
+      const baseX = 400 + (rootIndex * 600); // Space out multiple root nodes horizontally
+      let currentY = 100;
+      
+      // Function to recursively position nodes
+      const positionNode = (nodeId: string, x: number, y: number) => {
+        const node = nodeMap.get(nodeId);
+        if (!node) return;
+        
+        // Set position for this node
+        positions[nodeId] = { x, y };
+        
+        // Find child nodes
+        const childEdges = currentWorkflow.edges.filter(edge => edge.source === nodeId);
+        
+        if (childEdges.length === 0) return;
+        
+        // Handle conditional nodes (with multiple outputs)
+        if (node.type === 'condition') {
+          const yesEdge = childEdges.find(edge => edge.sourceHandle === 'yes');
+          const noEdge = childEdges.find(edge => edge.sourceHandle === 'no');
+          
+          if (yesEdge) {
+            positionNode(yesEdge.target, x - 300, y + nodeSpacing);
+          }
+          
+          if (noEdge) {
+            positionNode(noEdge.target, x + 300, y + nodeSpacing);
+          }
+          
+          // Other edges (if any)
+          childEdges
+            .filter(edge => edge.sourceHandle !== 'yes' && edge.sourceHandle !== 'no')
+            .forEach((edge, i) => {
+              positionNode(edge.target, x, y + nodeSpacing);
+            });
+        } else {
+          // Regular node with single output
+          childEdges.forEach((edge, i) => {
+            positionNode(edge.target, x, y + nodeSpacing);
+          });
+        }
+      };
+      
+      // Start positioning from the root node
+      positionNode(startNodeId, baseX, currentY);
+    });
+    
+    // Update node positions in the store
+    Object.entries(positions).forEach(([nodeId, position]) => {
+      updateNode(nodeId, { position });
+    });
+    
+    // Update the nodes in the flow
+    setNodes(nodes => 
+      nodes.map(node => ({
+        ...node,
+        position: positions[node.id] || node.position,
+        draggable: !viewLocked
+      }))
+    );
+    
+    // Center the flow
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.2 });
+    }, 100);
+  };
+
+  // Function to tidy up the workflow
+  const handleTidyWorkflow = () => {
+    autoArrangeNodes();
+  };
+
+  // Function to toggle view lock
+  const toggleViewLock = () => {
+    setViewLocked(!viewLocked);
+    
+    // Update node draggability
+    setNodes(nodes => 
+      nodes.map(node => ({
+        ...node,
+        draggable: viewLocked // Inverse of current viewLocked state
+      }))
+    );
+    
+    // If locking the view, auto-arrange nodes
+    if (!viewLocked) {
+      autoArrangeNodes();
+    }
+  };
+
   const handleAddNode = (nodeTemplate: any) => {
     if (!currentWorkflow) return;
 
     let newPosition = { x: 400, y: 100 };
+    let sourceNode = null;
+    let sourceHandle = null;
+    let targetHandle = null;
     
     if (addNodeAfter) {
       // Find the node we're adding after
       const afterNode = currentWorkflow.nodes.find(n => n.id === addNodeAfter);
       if (afterNode) {
-        // Position the new node below the selected node
-        newPosition = { 
-          x: afterNode.position.x, 
-          y: afterNode.position.y + 150 
-        };
+        sourceNode = afterNode;
         
-        // Shift all nodes below this position down
-        const nodesToShift = currentWorkflow.nodes.filter(n => 
-          n.position.y > afterNode.position.y && n.position.x === afterNode.position.x
-        );
-        
-        nodesToShift.forEach(node => {
-          const updatedNode = {
-            ...node,
-            position: { ...node.position, y: node.position.y + 150 }
-          };
-          // Update the node position in the store
-          // This would need to be implemented in the store
-        });
+        // Check if the source node is a conditional node
+        if (afterNode.type === 'condition') {
+          // For conditional nodes, position depends on which branch we're adding to
+          // This will be determined later when creating edges
+          if (afterNode.position) {
+            newPosition = { 
+              x: afterNode.position.x, 
+              y: afterNode.position.y + nodeSpacing 
+            };
+          }
+        } else {
+          // For regular nodes, position directly below
+          if (afterNode.position) {
+            newPosition = { 
+              x: afterNode.position.x, 
+              y: afterNode.position.y + nodeSpacing 
+            };
+          }
+        }
       }
     } else if (currentWorkflow.nodes.length === 0) {
       // First node
@@ -202,10 +350,16 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     } else {
       // Add at the end
       const lastNode = currentWorkflow.nodes[currentWorkflow.nodes.length - 1];
-      newPosition = { x: lastNode.position.x, y: lastNode.position.y + 150 };
+      if (lastNode.position) {
+        newPosition = { x: lastNode.position.x, y: lastNode.position.y + nodeSpacing };
+      }
     }
 
+    // Generate a unique ID for the new node
+    const nodeId = `node_${uuidv4()}`;
+
     const newNode = {
+      id: nodeId,
       type: nodeTemplate.type,
       position: newPosition,
       data: {
@@ -215,14 +369,74 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         icon: nodeTemplate.icon,
         integration: nodeTemplate.integration,
         config: nodeTemplate.config || {},
-        status: 'idle' as const,
-        nodeType: nodeTemplate.type
+        status: 'idle',
+        nodeType: nodeTemplate.type,
+        isConditional: nodeTemplate.type === 'condition'
       }
     };
 
-    addNode(newNode);
+    // Add the node to the workflow
+    const addedNode = addNode(newNode);
+    
+    // If we're adding after another node, create an edge
+    if (sourceNode) {
+      // For conditional nodes, handle the branching
+      if (sourceNode.type === 'condition') {
+        // Determine which branch to add to based on existing edges
+        const existingEdges = currentWorkflow.edges.filter(e => e.source === sourceNode.id);
+        const hasYesBranch = existingEdges.some(e => e.sourceHandle === 'yes');
+        const hasNoBranch = existingEdges.some(e => e.sourceHandle === 'no');
+        
+        if (!hasYesBranch) {
+          // Add to 'yes' branch
+          sourceHandle = 'yes';
+          // Position to the left
+          newPosition = { 
+            x: sourceNode.position.x - 300, 
+            y: sourceNode.position.y + nodeSpacing 
+          };
+        } else if (!hasNoBranch) {
+          // Add to 'no' branch
+          sourceHandle = 'no';
+          // Position to the right
+          newPosition = { 
+            x: sourceNode.position.x + 300, 
+            y: sourceNode.position.y + nodeSpacing 
+          };
+        } else {
+          // Both branches exist, add to default output
+          sourceHandle = 'default';
+          // Position below
+          newPosition = { 
+            x: sourceNode.position.x, 
+            y: sourceNode.position.y + nodeSpacing 
+          };
+        }
+        
+        // Update the node position
+        updateNode(nodeId, { position: newPosition });
+      }
+      
+      // Create the edge
+      const edgeId = `edge_${sourceNode.id}_${nodeId}`;
+      addWorkflowEdge({
+        id: edgeId,
+        source: sourceNode.id,
+        target: nodeId,
+        sourceHandle: sourceHandle,
+        targetHandle: targetHandle
+      });
+    }
+    
     setShowNodeLibrary(false);
     setAddNodeAfter(null);
+    
+    // Auto-arrange nodes if view is locked
+    if (viewLocked) {
+      setTimeout(() => {
+        autoArrangeNodes();
+      }, 100);
+    }
   };
 
   const handleSave = () => {
@@ -374,6 +588,33 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           </div>
 
           <div className="flex items-center gap-3">
+            {lastSaved && (
+              <span className="text-xs text-gray-500">
+                Saved {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+            
+            {/* View Lock Toggle */}
+            <button 
+              onClick={toggleViewLock}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                viewLocked 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {viewLocked ? 'View Locked' : 'Edit Mode'}
+            </button>
+            
+            {/* Tidy Button */}
+            <button 
+              onClick={handleTidyWorkflow}
+              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Tidy Workflow
+            </button>
+            
             <button 
               onClick={handleTest}
               disabled={workflowStatus === 'testing'}
@@ -415,15 +656,15 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               nodeTypes={nodeTypes}
               connectionMode={ConnectionMode.Loose}
               fitView
-              className="bg-gray-50"
+              className={`bg-gray-50 ${viewLocked ? 'cursor-default' : 'cursor-grab'}`}
               defaultViewport={{ x: 0, y: 0, zoom: 1 }}
               minZoom={0.3}
               maxZoom={2}
               snapToGrid={true}
               snapGrid={[20, 20]}
               deleteKeyCode={['Backspace', 'Delete']}
-              nodesDraggable={true}
-              nodesConnectable={false} // Disable manual connections since we use vertical flow
+              nodesDraggable={!viewLocked}
+              nodesConnectable={!viewLocked} // Enable connections in edit mode
               elementsSelectable={true}
             >
               <Background 

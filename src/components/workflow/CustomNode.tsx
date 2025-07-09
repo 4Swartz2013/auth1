@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
 import { 
   MoreHorizontal, 
   Copy, 
@@ -18,7 +18,9 @@ import {
   ArrowRight,
   Pause,
   X,
-  Plus
+  Plus,
+  Check,
+  XCircle
 } from 'lucide-react';
 import { useWorkflowStore } from '../../store/workflowStore';
 
@@ -120,7 +122,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   };
 
-  const isConditionalNode = data.nodeType === 'condition' || data.type === 'condition';
+  const isConditionalNode = data.nodeType === 'condition' || data.type === 'condition' || data.isConditional;
   const isTriggerNode = data.nodeType === 'trigger' || data.type === 'trigger';
   const isFanOutNode = data.nodeType === 'fanout' || data.type === 'fanout';
 
@@ -136,7 +138,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         />
       )}
 
-      {/* Node Body */}
+      {/* Node Body - Conditional nodes have special styling */}
       <div
         onClick={handleClick}
         className={`
@@ -293,13 +295,51 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
       </div>
 
-      {/* Output Handle - Single handle at bottom for vertical flow */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-        style={{ bottom: -6 }}
-      />
+      {/* Output Handles */}
+      {isConditionalNode ? (
+        <>
+          {/* Yes branch - left bottom */}
+          <div className="absolute -bottom-8 left-1/4 transform -translate-x-1/2 text-xs text-green-600 font-medium">
+            Yes
+          </div>
+          <Handle
+            id="yes"
+            type="source"
+            position={Position.Bottom}
+            className="w-3 h-3 bg-green-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ bottom: -6, left: '25%' }}
+          />
+          
+          {/* No branch - right bottom */}
+          <div className="absolute -bottom-8 right-1/4 transform translate-x-1/2 text-xs text-red-600 font-medium">
+            No
+          </div>
+          <Handle
+            id="no"
+            type="source"
+            position={Position.Bottom}
+            className="w-3 h-3 bg-red-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ bottom: -6, right: '25%' }}
+          />
+          
+          {/* Default output - center bottom */}
+          <Handle
+            id="default"
+            type="source"
+            position={Position.Bottom}
+            className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ bottom: -6 }}
+          />
+        </>
+      ) : (
+        /* Regular output handle - center bottom */
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ bottom: -6 }}
+        />
+      )}
 
       {/* Add Node Button - Below this node */}
       <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
