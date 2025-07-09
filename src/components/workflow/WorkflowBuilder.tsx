@@ -16,7 +16,7 @@ import ReactFlow, {
   MarkerType,
   Position
 } from 'reactflow';
-import { hierarchy, tree } from 'd3-hierarchy';
+import { hierarchy, tree, HierarchyNode } from 'd3-hierarchy';
 import 'reactflow/dist/style.css';
 import { 
   ChevronLeft, 
@@ -101,6 +101,9 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   // Layout configuration
   const [autoLayout, setAutoLayout] = useState(true);
 
+  // Animation settings for node transitions
+  const [nodeTransitionDuration, setNodeTransitionDuration] = useState(300);
+
   const reactFlowInstance = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
@@ -176,60 +179,70 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   // Function to automatically layout nodes using d3-hierarchy
   const applyHierarchicalLayout = useCallback(() => {
     if (!currentWorkflow || !currentWorkflow.nodes.length) return;
-    
+
     // Create a map of nodes by their IDs for quick lookup
-    const nodeMap = new Map();
+    const nodeMap = new Map<string, any>();
     currentWorkflow.nodes.forEach(node => {
       nodeMap.set(node.id, { ...node, children: [] });
     });
-    
+
     // Find root nodes (nodes that are not targets of any edge)
     const targetNodeIds = new Set(currentWorkflow.edges.map(edge => edge.target));
     const rootNodeIds = currentWorkflow.nodes
       .filter(node => !targetNodeIds.has(node.id))
       .map(node => node.id);
-    
+
     // If no root nodes found, use the first node
     const startNodeIds = rootNodeIds.length > 0 ? rootNodeIds : [currentWorkflow.nodes[0]?.id];
-    
+
     // Build the hierarchy by connecting children
     currentWorkflow.edges.forEach(edge => {
       const sourceNode = nodeMap.get(edge.source);
       const targetNode = nodeMap.get(edge.target);
-      
+
       if (sourceNode && targetNode) {
         // For conditional nodes, store the handle information
         if (edge.sourceHandle) {
           targetNode.sourceHandle = edge.sourceHandle;
         }
-        
+
         sourceNode.children.push(targetNode);
       }
     });
-    
+
     // Process each root node to create a separate tree
     startNodeIds.forEach((rootId, rootIndex) => {
       const rootNode = nodeMap.get(rootId);
       if (!rootNode) return;
-      
+
       // Create a d3 hierarchy from our tree
-      const hierarchyRoot = hierarchy(rootNode);
-      
+      const hierarchyRoot: HierarchyNode<any> = hierarchy(rootNode);
+
       // Use d3's tree layout
       const treeLayout = tree<typeof rootNode>()
-        .nodeSize([300, nodeSpacing]) // [horizontal, vertical] spacing
+        .nodeSize([350, nodeSpacing]) // [horizontal, vertical] spacing
         .separation((a, b) => {
           // Increase separation for nodes with different parents or conditional branches
-          return a.parent === b.parent ? 1.5 : 2;
+          if (a.parent !== b.parent) return 2.5;
+          
+          // If parent is a conditional node, increase separation between yes/no branches
+          if (a.parent?.data.type === 'condition') {
+            const aIsYes = a.data.sourceHandle === 'yes';
+            const bIsYes = b.data.sourceHandle === 'yes';
+            // If they're on different branches, increase separation
+            if (aIsYes !== bIsYes) return 3;
+          }
+          
+          return 1.5;
         });
-      
+
       // Apply the layout
       const layoutedTree = treeLayout(hierarchyRoot);
-      
+
       // Base position for this tree (to separate multiple trees)
       const baseX = 400 + (rootIndex * 800);
       const baseY = 100;
-      
+
       // Update node positions based on the layout
       layoutedTree.descendants().forEach(node => {
         const originalNode = nodeMap.get(node.data.id);
@@ -239,13 +252,13 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             node.children.forEach(child => {
               // Adjust x position based on which branch (yes/no) the child belongs to
               if (child.data.sourceHandle === 'yes') {
-                child.x -= 150; // Move "yes" branch to the left
+                child.x -= 200; // Move "yes" branch to the left
               } else if (child.data.sourceHandle === 'no') {
-                child.x += 150; // Move "no" branch to the right
+                child.x += 200; // Move "no" branch to the right
               }
             });
           }
-          
+
           // Update the node position
           updateNode(originalNode.id, {
             position: {
@@ -256,21 +269,30 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         }
       });
     });
-    
+
     // Update the nodes in the flow
-    setNodes(nodes => 
-      nodes.map(node => ({
+    setNodes(nodes => {
+      // Get the current positions for animation
+      const currentPositions = new Map(nodes.map(node => [node.id, { ...node.position }]));
+      
+      // Create updated nodes with new positions
+      return nodes.map(node => ({
         ...node,
         position: currentWorkflow.nodes.find(n => n.id === node.id)?.position || node.position,
-        draggable: editMode
-      }))
-    );
-    
+        draggable: editMode,
+        // Add transition style for smooth animation
+        style: {
+          ...node.style,
+          transition: `transform ${nodeTransitionDuration}ms ease-in-out`
+        }
+      }));
+    });
+
     // Center the flow
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.2 });
-    }, 100);
-  }, [currentWorkflow, updateNode, setNodes, reactFlowInstance, editMode, nodeSpacing]);
+    }, nodeTransitionDuration + 50);
+  }, [currentWorkflow, updateNode, setNodes, reactFlowInstance, editMode, nodeSpacing, nodeTransitionDuration]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -349,7 +371,8 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const handleAddNode = (nodeTemplate: any) => {
     if (!currentWorkflow) return;
 
-    let newPosition = { x: 400, y: 100 };
+    // Default position for new nodes
+    let newPosition = { x: 400, y: 100 }; 
     let sourceNode = null;
     let sourceHandle = null;
     
@@ -440,7 +463,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     setAddNodeBranch(null);
 
     // Auto-arrange nodes if view is locked
-    if (autoLayout) {
+    if (autoLayout || !editMode) {
       setTimeout(() => {
         autoArrangeNodes();
       }, 100);
@@ -658,7 +681,13 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg">
               <span className="text-sm font-medium text-gray-700">Auto Layout</span>
               <button 
-                onClick={() => setAutoLayout(!autoLayout)}
+                onClick={() => {
+                  setAutoLayout(!autoLayout);
+                  if (!autoLayout) {
+                    // Apply layout immediately when turning on
+                    setTimeout(applyHierarchicalLayout, 50);
+                  }
+                }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
                   autoLayout ? 'bg-green-600' : 'bg-gray-200'
                 }`}
@@ -684,8 +713,27 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <ReactFlow
               nodes={nodes}
               edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
+              onNodesChange={(changes) => {
+                onNodesChange(changes);
+                
+                // If a node was moved manually and auto layout is on, reapply layout
+                const positionChanges = changes.filter(change => 
+                  change.type === 'position' && change.dragging === false
+                );
+                
+                if (positionChanges.length > 0 && autoLayout && !editMode) {
+                  setTimeout(applyHierarchicalLayout, 50);
+                }
+              }}
+              onEdgesChange={(changes) => {
+                onEdgesChange(changes);
+                
+                // If an edge was removed and auto layout is on, reapply layout
+                const edgeRemovals = changes.filter(change => change.type === 'remove');
+                if (edgeRemovals.length > 0 && autoLayout) {
+                  setTimeout(applyHierarchicalLayout, 50);
+                }
+              }}
               onConnect={onConnect}
               onNodeClick={onNodeClick}
               onPaneClick={onPaneClick}
@@ -697,6 +745,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               minZoom={0.3}
               maxZoom={2}
               snapToGrid={true}
+              fitView
               snapGrid={[20, 20]}
               deleteKeyCode={['Backspace', 'Delete']}
               nodesDraggable={editMode}

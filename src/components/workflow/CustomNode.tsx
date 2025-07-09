@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import { Handle, Position, NodeProps, useReactFlow, NodeResizeControl } from 'reactflow';
 import { 
   MoreHorizontal, 
   Copy, 
@@ -31,6 +31,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [showMenu, setShowMenu] = React.useState(false);
   const reactFlowInstance = useReactFlow();
   const nodeType = data.nodeType || type;
+  const isConditionalNode = nodeType === 'condition' || data.isConditional;
 
   const handleClick = () => {
     const node = currentWorkflow?.nodes.find(n => n.id === id);
@@ -123,7 +124,6 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   };
 
-  const isConditionalNode = nodeType === 'condition' || data.isConditional;
   const isTriggerNode = nodeType === 'trigger';
   const isFanOutNode = nodeType === 'fanout';
 
@@ -143,7 +143,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       <div
         onClick={handleClick}
         className={`
-          bg-white border-2 rounded-xl shadow-sm min-w-[280px] max-w-[320px] cursor-pointer transition-all relative
+          bg-white border-2 rounded-xl shadow-sm min-w-[280px] max-w-[320px] cursor-pointer transition-all relative z-10
           ${selected 
             ? 'border-indigo-500 shadow-lg ring-2 ring-indigo-200' 
             : isConditionalNode 
@@ -151,6 +151,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
           }
         `}
+        style={{ transition: 'border-color 0.2s, box-shadow 0.2s' }}
       >
         {/* Delete Button - Top Right Corner */}
         <button
@@ -158,7 +159,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
         >
           <X className="w-3 h-3" />
-        </button>
+        </button> 
 
         {/* Node Header */}
         <div className="p-4">
@@ -166,7 +167,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-200">
                 {typeof getNodeIcon() === 'string' ? (
-                  <span className="text-lg">{getNodeIcon()}</span>
+                  <span className="text-lg">{getNodeIcon()}</span> 
                 ) : (
                   getNodeIcon()
                 )}
@@ -174,7 +175,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    {getNodeTypeLabel()}
+                    {getNodeTypeLabel()} 
                   </span> 
                   {data.integration && (
                     <>
@@ -183,7 +184,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     </>
                   )}
                 </div>
-                <div className="font-medium text-gray-900 text-sm leading-tight">
+                <div className="font-medium text-gray-900 text-sm leading-tight"> 
                   {data.label || 'Untitled Step'}
                 </div>
               </div>
@@ -191,7 +192,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             
             <div className="flex items-center gap-2">
               {/* Status Indicator */}
-              {getStatusIndicator()}
+              {getStatusIndicator()} 
               
               {/* Menu Button */}
               <div className="relative">
@@ -200,7 +201,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     e.stopPropagation();
                     setShowMenu(!showMenu);
                   }}
-                  className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                  className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity rounded" 
                 >
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
@@ -208,7 +209,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 {/* Dropdown Menu */}
                 {showMenu && (
                   <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px]">
-                    <button
+                    <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowMenu(false);
@@ -220,7 +221,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                       <Settings className="w-3 h-3" />
                       Configure
                     </button>
-                    <button
+                    <button 
                       onClick={handleCopy}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                     >
@@ -228,7 +229,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                       Duplicate
                     </button>
                     <button
-                      onClick={(e) => {
+                      onClick={(e) => { 
                         e.stopPropagation();
                         setShowMenu(false);
                         // Handle test
@@ -238,7 +239,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                       <Play className="w-3 h-3" />
                       Test Step
                     </button>
-                    <button
+                    <button 
                       onClick={handleDelete}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 last:rounded-b-lg"
                     >
@@ -252,7 +253,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
 
           {/* Subtitle */}
-          {data.subtitle && (
+          {data.subtitle && ( 
             <div className="text-sm text-gray-600 mb-3">
               {data.subtitle}
             </div>
@@ -260,7 +261,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           {/* Configuration Summary */}
           {data.config && Object.keys(data.config).length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="mt-3 pt-3 border-t border-gray-100"> 
               <div className="text-xs text-gray-600 space-y-1">
                 {data.config.triggerType && (
                   <div className="flex items-center gap-2">
@@ -268,7 +269,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     <span className="capitalize">{data.config.triggerType.replace('_', ' ')}</span>
                   </div>
                 )}
-                {data.config.action && (
+                {data.config.action && ( 
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Action:</span>
                     <span className="capitalize">{data.config.action.replace(/_/g, ' ')}</span>
@@ -280,7 +281,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     <code className="bg-gray-100 px-1 rounded text-xs">{data.config.condition}</code>
                   </div>
                 )}
-                {data.config.campaignName && (
+                {data.config.campaignName && ( 
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Campaign:</span>
                     <span>{data.config.campaignName}</span>
@@ -292,7 +293,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     <span>{data.config.delay}</span>
                   </div>
                 )}
-              </div>
+              </div> 
             </div>
           )}
         </div>
@@ -302,7 +303,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       {isConditionalNode ? (
         <>
           {/* Yes branch - left bottom */}
-          <div className="absolute -bottom-6 left-1/4 transform -translate-x-1/2 text-xs text-green-600 font-medium">
+          <div className="absolute -bottom-6 left-1/4 transform -translate-x-1/2 text-xs text-green-600 font-medium z-10">
             Yes
           </div>
           <Handle
@@ -314,7 +315,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           />
           
           {/* No branch - right bottom */}
-          <div className="absolute -bottom-6 right-1/4 transform translate-x-1/2 text-xs text-red-600 font-medium">
+          <div className="absolute -bottom-6 right-1/4 transform translate-x-1/2 text-xs text-red-600 font-medium z-10">
             No
           </div>
           <Handle
@@ -336,7 +337,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       )}
 
       {/* Add Node Button - Below this node */}
-      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <button
           onClick={(e) => {
             e.stopPropagation();

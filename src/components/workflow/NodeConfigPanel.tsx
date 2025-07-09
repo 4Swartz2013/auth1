@@ -214,6 +214,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
             {config.schedule === 'custom' && (
               <div>
                 <label htmlFor="cronExpression" className="block text-sm font-medium text-gray-700 mb-2">
+                  Cron Expression
                 </label>
                 <input
                   id="cronExpression"
