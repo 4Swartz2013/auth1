@@ -16,6 +16,7 @@ import ReactFlow, {
   MarkerType,
   Position
 } from 'reactflow';
+import { hierarchy, tree } from 'd3-hierarchy';
 import 'reactflow/dist/style.css';
 import { 
   ChevronLeft, 
@@ -97,6 +98,9 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const [editMode, setEditMode] = useState(false);
   const [nodeSpacing] = useState(200); // Vertical spacing between nodes
 
+  // Layout configuration
+  const [autoLayout, setAutoLayout] = useState(true);
+
   const reactFlowInstance = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
@@ -169,6 +173,105 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     }
   }, [currentWorkflow, setNodes, setEdges, setSelectedNode, setConfigPanelOpen, editMode]);
 
+  // Function to automatically layout nodes using d3-hierarchy
+  const applyHierarchicalLayout = useCallback(() => {
+    if (!currentWorkflow || !currentWorkflow.nodes.length) return;
+    
+    // Create a map of nodes by their IDs for quick lookup
+    const nodeMap = new Map();
+    currentWorkflow.nodes.forEach(node => {
+      nodeMap.set(node.id, { ...node, children: [] });
+    });
+    
+    // Find root nodes (nodes that are not targets of any edge)
+    const targetNodeIds = new Set(currentWorkflow.edges.map(edge => edge.target));
+    const rootNodeIds = currentWorkflow.nodes
+      .filter(node => !targetNodeIds.has(node.id))
+      .map(node => node.id);
+    
+    // If no root nodes found, use the first node
+    const startNodeIds = rootNodeIds.length > 0 ? rootNodeIds : [currentWorkflow.nodes[0]?.id];
+    
+    // Build the hierarchy by connecting children
+    currentWorkflow.edges.forEach(edge => {
+      const sourceNode = nodeMap.get(edge.source);
+      const targetNode = nodeMap.get(edge.target);
+      
+      if (sourceNode && targetNode) {
+        // For conditional nodes, store the handle information
+        if (edge.sourceHandle) {
+          targetNode.sourceHandle = edge.sourceHandle;
+        }
+        
+        sourceNode.children.push(targetNode);
+      }
+    });
+    
+    // Process each root node to create a separate tree
+    startNodeIds.forEach((rootId, rootIndex) => {
+      const rootNode = nodeMap.get(rootId);
+      if (!rootNode) return;
+      
+      // Create a d3 hierarchy from our tree
+      const hierarchyRoot = hierarchy(rootNode);
+      
+      // Use d3's tree layout
+      const treeLayout = tree<typeof rootNode>()
+        .nodeSize([300, nodeSpacing]) // [horizontal, vertical] spacing
+        .separation((a, b) => {
+          // Increase separation for nodes with different parents or conditional branches
+          return a.parent === b.parent ? 1.5 : 2;
+        });
+      
+      // Apply the layout
+      const layoutedTree = treeLayout(hierarchyRoot);
+      
+      // Base position for this tree (to separate multiple trees)
+      const baseX = 400 + (rootIndex * 800);
+      const baseY = 100;
+      
+      // Update node positions based on the layout
+      layoutedTree.descendants().forEach(node => {
+        const originalNode = nodeMap.get(node.data.id);
+        if (originalNode) {
+          // For conditional nodes, adjust child positions based on the branch
+          if (node.data.type === 'condition' && node.children) {
+            node.children.forEach(child => {
+              // Adjust x position based on which branch (yes/no) the child belongs to
+              if (child.data.sourceHandle === 'yes') {
+                child.x -= 150; // Move "yes" branch to the left
+              } else if (child.data.sourceHandle === 'no') {
+                child.x += 150; // Move "no" branch to the right
+              }
+            });
+          }
+          
+          // Update the node position
+          updateNode(originalNode.id, {
+            position: {
+              x: baseX + node.x, // x is horizontal position
+              y: baseY + node.y  // y is vertical position
+            }
+          });
+        }
+      });
+    });
+    
+    // Update the nodes in the flow
+    setNodes(nodes => 
+      nodes.map(node => ({
+        ...node,
+        position: currentWorkflow.nodes.find(n => n.id === node.id)?.position || node.position,
+        draggable: editMode
+      }))
+    );
+    
+    // Center the flow
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.2 });
+    }, 100);
+  }, [currentWorkflow, updateNode, setNodes, reactFlowInstance, editMode, nodeSpacing]);
+
   const onConnect = useCallback(
     (params: Connection) => {
       if (!editMode) return; // Only allow connections in edit mode
@@ -208,93 +311,8 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   // Function to automatically position nodes in a perfect vertical alignment
   const autoArrangeNodes = () => {
     if (!currentWorkflow) return;
-    
-    // Create a map of nodes by their IDs for quick lookup
-    const nodeMap = new Map<string, WorkflowNode>();
-    currentWorkflow.nodes.forEach(node => nodeMap.set(node.id, node));
-
-    // Find root nodes (nodes that are not targets of any edge)
-    const targetNodeIds = new Set(currentWorkflow.edges.map(edge => edge.target));
-    const rootNodeIds = currentWorkflow.nodes
-      .filter(node => !targetNodeIds.has(node.id))
-      .map(node => node.id);
-
-    // If no root nodes found, use the first node
-    const startNodeIds = rootNodeIds.length > 0 ? rootNodeIds : [currentWorkflow.nodes[0]?.id];
-
-    // Position map to track node positions
-    const positions: Record<string, { x: number; y: number }> = {};
-
-    // Process each root node
-    startNodeIds.forEach((startNodeId, rootIndex) => {
-      const baseX = 400 + (rootIndex * 600); // Space out multiple root nodes horizontally
-      let currentY = 100;
-
-      // Function to recursively position nodes
-      const positionNode = (nodeId: string, x: number, y: number, depth = 0) => {
-        const node = nodeMap.get(nodeId);
-        if (!node) return;
-
-        // Set position for this node
-        positions[nodeId] = { x, y };
-
-        // Find child nodes
-        const childEdges = currentWorkflow.edges.filter(edge => edge.source === nodeId);
-
-        if (childEdges.length === 0) return;
-
-        // Handle conditional nodes (with multiple outputs)
-        if (node.type === 'condition') {
-          const yesEdge = childEdges.find(edge => edge.sourceHandle === 'yes');
-          const noEdge = childEdges.find(edge => edge.sourceHandle === 'no');
-
-          // Calculate branch spacing based on depth
-          const branchSpacing = 300 / (depth + 1);
-
-          if (yesEdge) {
-            positionNode(yesEdge.target, x - branchSpacing, y + nodeSpacing, depth + 1);
-          }
-
-          if (noEdge) {
-            positionNode(noEdge.target, x + branchSpacing, y + nodeSpacing, depth + 1);
-          }
-
-          // Other edges (if any)
-          childEdges
-            .filter(edge => edge.sourceHandle !== 'yes' && edge.sourceHandle !== 'no')
-            .forEach((edge, i) => {
-              positionNode(edge.target, x, y + nodeSpacing, depth + 1);
-            });
-        } else {
-          // Regular node with single output
-          childEdges.forEach((edge, i) => {
-            positionNode(edge.target, x, y + nodeSpacing, depth + 1);
-          });
-        }
-      };
-
-      // Start positioning from the root node
-      positionNode(startNodeId, baseX, currentY, 0);
-    });
-
-    // Update node positions in the store
-    Object.entries(positions).forEach(([nodeId, position]) => {
-      updateNode(nodeId, { position });
-    });
-
-    // Update the nodes in the flow
-    setNodes(nodes => 
-      nodes.map(node => ({
-        ...node,
-        position: positions[node.id] || node.position,
-        draggable: editMode
-      }))
-    );
-    
-    // Center the flow
-    setTimeout(() => {
-      reactFlowInstance.fitView({ padding: 0.2 });
-    }, 100);
+    // Use the d3-hierarchy based layout
+    applyHierarchicalLayout();
   };
 
   // Function to tidy up the workflow
@@ -317,6 +335,14 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     // If exiting edit mode, auto-arrange nodes
     if (editMode) {
       autoArrangeNodes();
+    } else {
+      // When entering edit mode, make nodes draggable
+      setNodes(nodes => 
+        nodes.map(node => ({
+          ...node,
+          draggable: !editMode // Inverse of current editMode state
+        }))
+      );
     }
   };
 
@@ -397,7 +423,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     const addedNode = addNode(newNode);
     
     // If we're adding after another node, create an edge
-    if (sourceNode) {
+    if (sourceNode && addedNode) {
       // Create the edge
       const edgeId = `edge_${uuidv4()}`;
       addWorkflowEdge({
@@ -414,7 +440,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     setAddNodeBranch(null);
 
     // Auto-arrange nodes if view is locked
-    if (!editMode) {
+    if (autoLayout) {
       setTimeout(() => {
         autoArrangeNodes();
       }, 100);
@@ -424,7 +450,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const handleAddConditionalBranch = (nodeId: string, branch: 'yes' | 'no') => {
     setAddNodeAfter(nodeId);
     setAddNodeBranch(branch);
-    setShowNodeLibrary(true);
+    setShowNodeLibrary(true); 
   };
 
   const handleSave = () => {
@@ -597,6 +623,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <button 
               onClick={handleTidyWorkflow}
               className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium"
+              title="Reorganize nodes using automatic layout"
             >
               <RotateCcw className="w-4 h-4" />
               Tidy Workflow
@@ -605,7 +632,8 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <button 
               onClick={handleTest}
               disabled={workflowStatus === 'testing'}
-              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium disabled:opacity-50" 
+              title="Test the entire workflow"
             >
               <TestTube className="w-4 h-4" />
               {workflowStatus === 'testing' ? 'Testing...' : 'Test Workflow'}
@@ -613,6 +641,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <button 
               onClick={handleSave}
               className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium"
+              title="Save workflow changes"
             >
               <Save className="w-4 h-4" />
               Save
@@ -620,9 +649,29 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
             <button 
               onClick={handleDeploy}
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+              title="Publish workflow to make it live"
             >
               {workflowStatus === 'published' ? 'Published' : 'Publish'}
             </button>
+            
+            {/* Auto Layout Toggle */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg">
+              <span className="text-sm font-medium text-gray-700">Auto Layout</span>
+              <button 
+                onClick={() => setAutoLayout(!autoLayout)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  autoLayout ? 'bg-green-600' : 'bg-gray-200'
+                }`}
+                title="Toggle automatic node layout"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoLayout ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            
             <button className="p-2 text-gray-400 hover:text-gray-600">
               <MoreHorizontal className="w-5 h-5" />
             </button>
@@ -699,9 +748,9 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                 <Panel position="bottom-center" className="mb-20">
                   <button
                     onClick={() => {
-                    setAddNodeAfter(null);
-                    setAddNodeBranch(null);
-                    setShowNodeLibrary(true);
+                      setAddNodeAfter(null);
+                      setAddNodeBranch(null);
+                      setShowNodeLibrary(true);
                     }}
                     className="w-8 h-8 bg-white border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center hover:border-indigo-500 hover:bg-indigo-50 transition-colors shadow-sm"
                   >
@@ -713,7 +762,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               {/* Conditional Node Branch Buttons */}
               {currentWorkflow.nodes.filter(node => node.type === 'condition').map(node => {
                 const yesEdge = currentWorkflow.edges.find(e => e.source === node.id && e.sourceHandle === 'yes');
-                const noEdge = currentWorkflow.edges.find(e => e.source === node.id && e.sourceHandle === 'no');
+                const noEdge = currentWorkflow.edges.find(e => e.source === node.id && e.sourceHandle === 'no'); 
                 
                 return (
                   <React.Fragment key={`branch-buttons-${node.id}`}>
@@ -721,7 +770,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                       <Panel 
                         position="top-center" 
                         className="pointer-events-none" 
-                        style={{ 
+                        style={{  
                           position: 'absolute',
                           left: node.position.x - 150,
                           top: node.position.y + 120
@@ -740,7 +789,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                       <Panel 
                         position="top-center" 
                         className="pointer-events-none" 
-                        style={{ 
+                        style={{  
                           position: 'absolute',
                           left: node.position.x + 150,
                           top: node.position.y + 120
@@ -773,7 +822,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
       {/* Node Library Modal */}
       {showNodeLibrary && (
         <NodeLibrary
-          onSelectNode={(template) => handleAddNode(template)}
+          onSelectNode={handleAddNode}
           onClose={() => {
             setShowNodeLibrary(false);
             setAddNodeAfter(null);
