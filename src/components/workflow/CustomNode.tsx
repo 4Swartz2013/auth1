@@ -11,16 +11,18 @@ import {
   Clock,
   Zap,
   Code,
-  GitBranch,
-  Globe,
   Calendar,
+  Globe,
   Database,
   ArrowRight,
+  Shield,
+  Activity,
   Pause,
   X,
   Plus,
   Check,
-  XCircle
+  XCircle,
+  GitBranch
 } from 'lucide-react';
 import { useWorkflowStore } from '../../store/workflowStore';
 

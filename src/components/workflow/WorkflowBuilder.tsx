@@ -562,6 +562,12 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               {getStatusIcon()}
               <span className="capitalize">{workflowStatus}</span>
             </div>
+
+            {lastSaved && (
+              <span className="text-xs text-gray-500">
+                Saved {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

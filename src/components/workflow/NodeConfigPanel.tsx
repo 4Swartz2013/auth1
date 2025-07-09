@@ -16,7 +16,8 @@ import {
   Settings,
   CheckCircle,
   AlertTriangle,
-  Info
+  Info,
+  XCircle
 } from 'lucide-react';
 import { WorkflowNode } from '../../types/workflow';
 import { useWorkflowStore } from '../../store/workflowStore';
