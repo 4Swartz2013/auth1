@@ -95,7 +95,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'published' | 'testing'>('draft');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [nodeSpacing] = useState(150); // Vertical spacing between nodes
+  const [nodeSpacing] = useState(200); // Vertical spacing between nodes
 
   const reactFlowInstance = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -212,73 +212,76 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     // Create a map of nodes by their IDs for quick lookup
     const nodeMap = new Map<string, WorkflowNode>();
     currentWorkflow.nodes.forEach(node => nodeMap.set(node.id, node));
-    
+
     // Find root nodes (nodes that are not targets of any edge)
     const targetNodeIds = new Set(currentWorkflow.edges.map(edge => edge.target));
     const rootNodeIds = currentWorkflow.nodes
       .filter(node => !targetNodeIds.has(node.id))
       .map(node => node.id);
-    
+
     // If no root nodes found, use the first node
     const startNodeIds = rootNodeIds.length > 0 ? rootNodeIds : [currentWorkflow.nodes[0]?.id];
-    
+
     // Position map to track node positions
     const positions: Record<string, { x: number; y: number }> = {};
-    
+
     // Process each root node
     startNodeIds.forEach((startNodeId, rootIndex) => {
       const baseX = 400 + (rootIndex * 600); // Space out multiple root nodes horizontally
       let currentY = 100;
-      
+
       // Function to recursively position nodes
-      const positionNode = (nodeId: string, x: number, y: number) => {
+      const positionNode = (nodeId: string, x: number, y: number, depth = 0) => {
         const node = nodeMap.get(nodeId);
         if (!node) return;
-        
+
         // Set position for this node
         positions[nodeId] = { x, y };
-        
+
         // Find child nodes
         const childEdges = currentWorkflow.edges.filter(edge => edge.source === nodeId);
-        
+
         if (childEdges.length === 0) return;
-        
+
         // Handle conditional nodes (with multiple outputs)
         if (node.type === 'condition') {
           const yesEdge = childEdges.find(edge => edge.sourceHandle === 'yes');
           const noEdge = childEdges.find(edge => edge.sourceHandle === 'no');
-          
+
+          // Calculate branch spacing based on depth
+          const branchSpacing = 300 / (depth + 1);
+
           if (yesEdge) {
-            positionNode(yesEdge.target, x - 300, y + nodeSpacing);
+            positionNode(yesEdge.target, x - branchSpacing, y + nodeSpacing, depth + 1);
           }
-          
+
           if (noEdge) {
-            positionNode(noEdge.target, x + 300, y + nodeSpacing);
+            positionNode(noEdge.target, x + branchSpacing, y + nodeSpacing, depth + 1);
           }
-          
+
           // Other edges (if any)
           childEdges
             .filter(edge => edge.sourceHandle !== 'yes' && edge.sourceHandle !== 'no')
             .forEach((edge, i) => {
-              positionNode(edge.target, x, y + nodeSpacing);
+              positionNode(edge.target, x, y + nodeSpacing, depth + 1);
             });
         } else {
           // Regular node with single output
           childEdges.forEach((edge, i) => {
-            positionNode(edge.target, x, y + nodeSpacing);
+            positionNode(edge.target, x, y + nodeSpacing, depth + 1);
           });
         }
       };
-      
+
       // Start positioning from the root node
-      positionNode(startNodeId, baseX, currentY);
+      positionNode(startNodeId, baseX, currentY, 0);
     });
-    
+
     // Update node positions in the store
     Object.entries(positions).forEach(([nodeId, position]) => {
       updateNode(nodeId, { position });
     });
-    
+
     // Update the nodes in the flow
     setNodes(nodes => 
       nodes.map(node => ({
@@ -396,7 +399,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     // If we're adding after another node, create an edge
     if (sourceNode) {
       // Create the edge
-      const edgeId = `edge_${sourceNode.id}_${nodeId}`;
+      const edgeId = `edge_${uuidv4()}`;
       addWorkflowEdge({
         id: edgeId,
         source: sourceNode.id,
@@ -409,7 +412,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     setShowNodeLibrary(false);
     setAddNodeAfter(null);
     setAddNodeBranch(null);
-    
+
     // Auto-arrange nodes if view is locked
     if (!editMode) {
       setTimeout(() => {
@@ -696,9 +699,9 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                 <Panel position="bottom-center" className="mb-20">
                   <button
                     onClick={() => {
-                      setAddNodeAfter(null);
-                      setAddNodeBranch(null);
-                      setShowNodeLibrary(true);
+                    setAddNodeAfter(null);
+                    setAddNodeBranch(null);
+                    setShowNodeLibrary(true);
                     }}
                     className="w-8 h-8 bg-white border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center hover:border-indigo-500 hover:bg-indigo-50 transition-colors shadow-sm"
                   >

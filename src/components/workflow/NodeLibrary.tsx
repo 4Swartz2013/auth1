@@ -28,7 +28,7 @@ const NodeLibrary: React.FC<NodeLibraryProps> = ({ onSelectNode, onClose, integr
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const nodeTemplates: NodeTemplate[] = [
+  let nodeTemplates: NodeTemplate[] = [
     // Triggers
     {
       type: 'trigger',
@@ -115,6 +115,23 @@ const NodeLibrary: React.FC<NodeLibraryProps> = ({ onSelectNode, onClose, integr
     },
     {
       type: 'function',
+      label: 'JavaScript Function',
+      description: 'Execute custom JavaScript code to transform data or perform calculations',
+      icon: '⚡',
+      category: 'logic',
+      config: {
+        functionCode: `// Write your JavaScript function here
+function execute(input) {
+  // Your logic here
+  return {
+    success: true,
+    data: input
+  };
+}`
+      }
+    },
+    {
+      type: 'function',
       label: 'Function',
       description: 'Execute a custom JavaScript function and return a response',
       icon: '⚡',
@@ -167,18 +184,6 @@ const NodeLibrary: React.FC<NodeLibraryProps> = ({ onSelectNode, onClose, integr
     { id: 'utility', label: 'Utility', icon: Globe }
   ];
   
-  // Add conditional node template if not already in the list
-  const hasConditionalTemplate = nodeTemplates.some(t => t.type === 'condition');
-  if (!hasConditionalTemplate) {
-    nodeTemplates.push({
-      type: 'condition',
-      label: 'Conditional',
-      description: 'Add conditional logic that executes different paths based on conditions',
-      icon: '🔀',
-      category: 'logic'
-    });
-  }
-
   const filteredTemplates = nodeTemplates.filter(template => {
     const matchesSearch = template.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          template.description.toLowerCase().includes(searchTerm.toLowerCase());

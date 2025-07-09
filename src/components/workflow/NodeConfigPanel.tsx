@@ -64,7 +64,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
   const getSubtitle = () => {
     const nodeType = node.data.nodeType || node.type;
     
-    if (nodeType === 'trigger') {
+    if (nodeType === 'trigger' && config.triggerType) {
       if (config.triggerType === 'app_event') return 'App Event';
       if (config.triggerType === 'scheduler') return 'Scheduler';
       if (config.triggerType === 'integration_enabled') return 'Integration Enabled';
@@ -83,6 +83,10 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
     
     if (nodeType === 'delay' && config.delay) {
       return `Wait ${config.delay}`;
+    }
+
+    if (nodeType === 'condition' && config.condition) {
+      return `If ${config.condition}`;
     }
     
     return node.data.subtitle || node.data.integration || '';
@@ -209,7 +213,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
             
             {config.schedule === 'custom' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <X className="w-4 h-4 text-red-600" />
                   Cron Expression
                 </label>
                 <input
@@ -525,7 +529,7 @@ function execute(input) {
                 : 'bg-red-50 border-red-200'
             }`}>
               <div className="flex items-center gap-2 mb-2">
-                {testResults.status === 'success' ? (
+                <Check className="w-4 h-4 text-green-600" />
                   <CheckCircle className="w-4 h-4 text-green-600" />
                 ) : (
                   <AlertTriangle className="w-4 h-4 text-red-600" />

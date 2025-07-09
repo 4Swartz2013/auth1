@@ -30,6 +30,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const { setSelectedNode, deleteNode, currentWorkflow } = useWorkflowStore();
   const [showMenu, setShowMenu] = React.useState(false);
   const reactFlowInstance = useReactFlow();
+  const nodeType = data.nodeType || type;
 
   const handleClick = () => {
     const node = currentWorkflow?.nodes.find(n => n.id === id);
@@ -59,7 +60,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     if (data.integration === 'shopify') return '🛍️';
     
     // Node type icons
-    switch (data.nodeType || data.type) {
+    switch (nodeType) {
       case 'trigger':
         return <Zap className="w-5 h-5 text-indigo-600" />;
       case 'action':
@@ -84,7 +85,8 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   };
 
   const getStatusIndicator = () => {
-    switch (data.status) {
+    const status = data.status || 'idle';
+    switch (status) {
       case 'success':
         return <div className="w-2 h-2 bg-green-500 rounded-full" />;
       case 'error':
@@ -97,7 +99,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   };
 
   const getNodeTypeLabel = () => {
-    switch (data.nodeType || data.type) {
+    switch (nodeType) {
       case 'trigger':
         return 'Trigger';
       case 'action':
@@ -121,9 +123,9 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   };
 
-  const isConditionalNode = data.nodeType === 'condition' || data.type === 'condition' || data.isConditional;
-  const isTriggerNode = data.nodeType === 'trigger' || data.type === 'trigger';
-  const isFanOutNode = data.nodeType === 'fanout' || data.type === 'fanout';
+  const isConditionalNode = nodeType === 'condition' || data.isConditional;
+  const isTriggerNode = nodeType === 'trigger';
+  const isFanOutNode = nodeType === 'fanout';
 
   return (
     <div className="relative group">
@@ -141,10 +143,12 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       <div
         onClick={handleClick}
         className={`
-          bg-white border-2 rounded-xl shadow-sm min-w-[280px] cursor-pointer transition-all relative
+          bg-white border-2 rounded-xl shadow-sm min-w-[280px] max-w-[320px] cursor-pointer transition-all relative
           ${selected 
             ? 'border-indigo-500 shadow-lg ring-2 ring-indigo-200' 
-            : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+            : isConditionalNode 
+              ? 'border-orange-200 hover:border-orange-300 hover:shadow-md' 
+              : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
           }
         `}
       >
@@ -171,7 +175,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
                     {getNodeTypeLabel()}
-                  </span>
+                  </span> 
                   {data.integration && (
                     <>
                       <span className="text-gray-300">•</span>
@@ -298,26 +302,26 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       {isConditionalNode ? (
         <>
           {/* Yes branch - left bottom */}
-          <div className="absolute -bottom-8 left-1/4 transform -translate-x-1/2 text-xs text-green-600 font-medium">
+          <div className="absolute -bottom-6 left-1/4 transform -translate-x-1/2 text-xs text-green-600 font-medium">
             Yes
           </div>
           <Handle
             id="yes"
             type="source"
             position={Position.Bottom}
-            className="w-3 h-3 bg-green-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            className="w-3 h-3 bg-green-500 border-2 border-white rounded-full opacity-100 transition-opacity"
             style={{ bottom: -6, left: '25%' }}
           />
           
           {/* No branch - right bottom */}
-          <div className="absolute -bottom-8 right-1/4 transform translate-x-1/2 text-xs text-red-600 font-medium">
+          <div className="absolute -bottom-6 right-1/4 transform translate-x-1/2 text-xs text-red-600 font-medium">
             No
           </div>
           <Handle
             id="no"
             type="source"
             position={Position.Bottom}
-            className="w-3 h-3 bg-red-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            className="w-3 h-3 bg-red-500 border-2 border-white rounded-full opacity-100 transition-opacity"
             style={{ bottom: -6, right: '25%' }}
           />
         </>
@@ -326,7 +330,7 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         <Handle
           type="source"
           position={Position.Bottom}
-          className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-100 transition-opacity"
           style={{ bottom: -6 }}
         />
       )}
