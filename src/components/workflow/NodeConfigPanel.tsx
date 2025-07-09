@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, 
   Save, 
-  TestTube, 
+  TestTube,
   ChevronRight, 
   Play, 
   ArrowRight, 
@@ -16,7 +16,8 @@ import {
   Settings,
   CheckCircle,
   AlertTriangle,
-  Info
+  Info,
+  GitBranch
 } from 'lucide-react';
 import { WorkflowNode } from '../../types/workflow';
 import { useWorkflowStore } from '../../store/workflowStore';
@@ -376,7 +377,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
   const renderConditionalConfig = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-700 mb-3">
           Condition Logic
         </label>
         <textarea
@@ -386,9 +387,36 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ node, onClose }) => {
           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
           rows={4}
         />
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 mt-2 mb-4">
           Use JavaScript expressions with variables in double braces. Example: {`{{email}}.includes('@gmail.com')`}
         </p>
+        
+        <div className="flex items-center gap-2 text-sm text-gray-700 mb-3">
+          <GitBranch className="w-4 h-4 text-orange-500" />
+          <span className="font-medium">Branch Configuration</span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-3 border border-green-200 rounded-lg bg-green-50">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-medium text-green-800">Yes Branch</span>
+            </div>
+            <p className="text-xs text-green-700">
+              Actions to perform when condition is true
+            </p>
+          </div>
+          
+          <div className="p-3 border border-red-200 rounded-lg bg-red-50">
+            <div className="flex items-center gap-2 mb-2">
+              <XCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm font-medium text-red-800">No Branch</span>
+            </div>
+            <p className="text-xs text-red-700">
+              Actions to perform when condition is false
+            </p>
+          </div>
+        </div>
       </div>
       
       <div className="bg-gray-50 rounded-lg p-4">

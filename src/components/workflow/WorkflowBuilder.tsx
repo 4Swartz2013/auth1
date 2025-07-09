@@ -37,7 +37,9 @@ import {
   CheckCircle,
   AlertCircle,
   Pause,
-  RotateCcw
+  RotateCcw,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useWorkflowStore } from '../../store/workflowStore';
@@ -78,7 +80,8 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     updateNode,
     setSelectedNode,
     setConfigPanelOpen,
-    workflows
+    workflows,
+    deleteEdge
   } = useWorkflowStore();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -87,6 +90,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
   const [workflowName, setWorkflowName] = useState(currentWorkflow?.name || 'New Workflow');
   const [isEditingName, setIsEditingName] = useState(false);
   const [addNodeAfter, setAddNodeAfter] = useState<string | null>(null);
+  const [addNodeBranch, setAddNodeBranch] = useState<'yes' | 'no' | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
   const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'published' | 'testing'>('draft');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -317,7 +321,6 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     let newPosition = { x: 400, y: 100 };
     let sourceNode = null;
     let sourceHandle = null;
-    let targetHandle = null;
     
     if (addNodeAfter) {
       // Find the node we're adding after
@@ -328,8 +331,21 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         // Check if the source node is a conditional node
         if (afterNode.type === 'condition') {
           // For conditional nodes, position depends on which branch we're adding to
-          // This will be determined later when creating edges
-          if (afterNode.position) {
+          if (addNodeBranch === 'yes') {
+            sourceHandle = 'yes';
+            newPosition = { 
+              x: afterNode.position.x - 300, 
+              y: afterNode.position.y + nodeSpacing 
+            };
+          } else if (addNodeBranch === 'no') {
+            sourceHandle = 'no';
+            newPosition = { 
+              x: afterNode.position.x + 300, 
+              y: afterNode.position.y + nodeSpacing 
+            };
+          } else {
+            // Default branch
+            sourceHandle = 'default';
             newPosition = { 
               x: afterNode.position.x, 
               y: afterNode.position.y + nodeSpacing 
@@ -337,12 +353,10 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           }
         } else {
           // For regular nodes, position directly below
-          if (afterNode.position) {
-            newPosition = { 
-              x: afterNode.position.x, 
-              y: afterNode.position.y + nodeSpacing 
-            };
-          }
+          newPosition = { 
+            x: afterNode.position.x, 
+            y: afterNode.position.y + nodeSpacing 
+          };
         }
       }
     } else if (currentWorkflow.nodes.length === 0) {
@@ -351,9 +365,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     } else {
       // Add at the end
       const lastNode = currentWorkflow.nodes[currentWorkflow.nodes.length - 1];
-      if (lastNode.position) {
-        newPosition = { x: lastNode.position.x, y: lastNode.position.y + nodeSpacing };
-      }
+      newPosition = { x: lastNode.position.x, y: lastNode.position.y + nodeSpacing };
     }
 
     // Generate a unique ID for the new node
@@ -381,43 +393,6 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
     
     // If we're adding after another node, create an edge
     if (sourceNode) {
-      // For conditional nodes, handle the branching
-      if (sourceNode.type === 'condition') {
-        // Determine which branch to add to based on existing edges
-        const existingEdges = currentWorkflow.edges.filter(e => e.source === sourceNode.id);
-        const hasYesBranch = existingEdges.some(e => e.sourceHandle === 'yes');
-        const hasNoBranch = existingEdges.some(e => e.sourceHandle === 'no');
-        
-        if (!hasYesBranch) {
-          // Add to 'yes' branch
-          sourceHandle = 'yes';
-          // Position to the left
-          newPosition = { 
-            x: sourceNode.position.x - 300, 
-            y: sourceNode.position.y + nodeSpacing 
-          };
-        } else if (!hasNoBranch) {
-          // Add to 'no' branch
-          sourceHandle = 'no';
-          // Position to the right
-          newPosition = { 
-            x: sourceNode.position.x + 300, 
-            y: sourceNode.position.y + nodeSpacing 
-          };
-        } else {
-          // Both branches exist, add to default output
-          sourceHandle = 'default';
-          // Position below
-          newPosition = { 
-            x: sourceNode.position.x, 
-            y: sourceNode.position.y + nodeSpacing 
-          };
-        }
-        
-        // Update the node position
-        updateNode(nodeId, { position: newPosition });
-      }
-      
       // Create the edge
       const edgeId = `edge_${sourceNode.id}_${nodeId}`;
       addWorkflowEdge({
@@ -425,12 +400,13 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         source: sourceNode.id,
         target: nodeId,
         sourceHandle: sourceHandle,
-        targetHandle: targetHandle
+        targetHandle: null
       });
     }
     
     setShowNodeLibrary(false);
     setAddNodeAfter(null);
+    setAddNodeBranch(null);
     
     // Auto-arrange nodes if view is locked
     if (viewLocked) {
@@ -438,6 +414,12 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
         autoArrangeNodes();
       }, 100);
     }
+  };
+
+  const handleAddConditionalBranch = (nodeId: string, branch: 'yes' | 'no') => {
+    setAddNodeAfter(nodeId);
+    setAddNodeBranch(branch);
+    setShowNodeLibrary(true);
   };
 
   const handleSave = () => {
@@ -580,31 +562,29 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
               {getStatusIcon()}
               <span className="capitalize">{workflowStatus}</span>
             </div>
-
-            {lastSaved && (
-              <span className="text-xs text-gray-500">
-                Saved {lastSaved.toLocaleTimeString()}
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-3">
-            {lastSaved && (
-              <span className="text-xs text-gray-500">
-                Saved {lastSaved.toLocaleTimeString()}
-              </span>
-            )}
-            
             {/* View Lock Toggle */}
             <button 
               onClick={toggleViewLock}
-              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                 viewLocked 
-                  ? 'bg-indigo-100 text-indigo-700' 
-                  : 'text-gray-700 hover:bg-gray-50'
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-gray-100 text-gray-700'
               }`}
             >
-              {viewLocked ? 'View Locked' : 'Edit Mode'}
+              {viewLocked ? (
+                <>
+                  <Lock className="w-4 h-4" />
+                  <span className="text-sm font-medium">View Locked</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-4 h-4" />
+                  <span className="text-sm font-medium">Edit Mode</span>
+                </>
+              )}
             </button>
             
             {/* Tidy Button */}
@@ -714,6 +694,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                   <button
                     onClick={() => {
                       setAddNodeAfter(null);
+                      setAddNodeBranch(null);
                       setShowNodeLibrary(true);
                     }}
                     className="w-8 h-8 bg-white border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center hover:border-indigo-500 hover:bg-indigo-50 transition-colors shadow-sm"
@@ -722,6 +703,54 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
                   </button>
                 </Panel>
               )}
+              
+              {/* Conditional Node Branch Buttons */}
+              {currentWorkflow.nodes.filter(node => node.type === 'condition').map(node => {
+                const yesEdge = currentWorkflow.edges.find(e => e.source === node.id && e.sourceHandle === 'yes');
+                const noEdge = currentWorkflow.edges.find(e => e.source === node.id && e.sourceHandle === 'no');
+                
+                return (
+                  <React.Fragment key={`branch-buttons-${node.id}`}>
+                    {!yesEdge && (
+                      <Panel 
+                        position="top-center" 
+                        className="pointer-events-none" 
+                        style={{ 
+                          position: 'absolute',
+                          left: node.position.x - 150,
+                          top: node.position.y + 120
+                        }}
+                      >
+                        <button
+                          onClick={() => handleAddConditionalBranch(node.id, 'yes')}
+                          className="pointer-events-auto w-8 h-8 bg-green-100 border-2 border-dashed border-green-300 rounded-full flex items-center justify-center hover:border-green-500 hover:bg-green-50 transition-colors shadow-sm"
+                        >
+                          <Plus className="w-4 h-4 text-green-600" />
+                        </button>
+                      </Panel>
+                    )}
+                    
+                    {!noEdge && (
+                      <Panel 
+                        position="top-center" 
+                        className="pointer-events-none" 
+                        style={{ 
+                          position: 'absolute',
+                          left: node.position.x + 150,
+                          top: node.position.y + 120
+                        }}
+                      >
+                        <button
+                          onClick={() => handleAddConditionalBranch(node.id, 'no')}
+                          className="pointer-events-auto w-8 h-8 bg-red-100 border-2 border-dashed border-red-300 rounded-full flex items-center justify-center hover:border-red-500 hover:bg-red-50 transition-colors shadow-sm"
+                        >
+                          <Plus className="w-4 h-4 text-red-600" />
+                        </button>
+                      </Panel>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </ReactFlow>
           </div>
 
@@ -742,6 +771,7 @@ const WorkflowBuilderContent: React.FC<WorkflowBuilderProps> = ({ onBack }) => {
           onClose={() => {
             setShowNodeLibrary(false);
             setAddNodeAfter(null);
+            setAddNodeBranch(null);
           }}
           integration={currentWorkflow.integration}
         />

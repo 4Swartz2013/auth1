@@ -27,6 +27,7 @@ import { useWorkflowStore } from '../../store/workflowStore';
 const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const { setSelectedNode, deleteNode, currentWorkflow } = useWorkflowStore();
   const [showMenu, setShowMenu] = React.useState(false);
+  const reactFlowInstance = useReactFlow();
 
   const handleClick = () => {
     const node = currentWorkflow?.nodes.find(n => n.id === id);
@@ -75,8 +76,6 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         return <Clock className="w-5 h-5 text-yellow-600" />;
       case 'resource':
         return <Database className="w-5 h-5 text-gray-600" />;
-      case 'scheduler':
-        return <Calendar className="w-5 h-5 text-indigo-600" />;
       default:
         return <Settings className="w-5 h-5 text-gray-600" />;
     }
@@ -101,10 +100,10 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         return 'Trigger';
       case 'action':
         return 'Action';
-      case 'function':
-        return 'Function';
       case 'condition':
         return 'Conditional';
+      case 'function':
+        return 'Function';
       case 'request':
         return 'Request';
       case 'response':
@@ -115,8 +114,6 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         return 'Delay';
       case 'resource':
         return 'Resource';
-      case 'scheduler':
-        return 'Scheduler';
       default:
         return data.label;
     }
@@ -320,15 +317,6 @@ const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             position={Position.Bottom}
             className="w-3 h-3 bg-red-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
             style={{ bottom: -6, right: '25%' }}
-          />
-          
-          {/* Default output - center bottom */}
-          <Handle
-            id="default"
-            type="source"
-            position={Position.Bottom}
-            className="w-3 h-3 bg-indigo-500 border-2 border-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ bottom: -6 }}
           />
         </>
       ) : (
