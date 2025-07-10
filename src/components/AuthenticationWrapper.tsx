@@ -28,9 +28,9 @@ const AuthenticationWrapper: React.FC = () => {
   const [showDatabaseSetup, setShowDatabaseSetup] = useState(false);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
   const [databaseSetup, setDatabaseSetup] = useState(false);
-  
-  const { setCurrentUserId, loadCredentialsFromDatabase } = useIntegrationStore();
-  
+
+  // Get integration store functions
+  const { setCurrentUserId, loadCredentialsFromDatabase, loadIntegrationsFromDatabase } = useIntegrationStore();
 
   useEffect(() => {
     checkSupabaseConnection();
@@ -112,10 +112,9 @@ const AuthenticationWrapper: React.FC = () => {
         // Load credentials
         await loadCredentialsFromDatabase();
         setDatabaseSetup(true);
-
-        // Load credentials
-        await loadCredentialsFromDatabase();
-        setDatabaseSetup(true);
+        
+        // Load integrations
+        await loadIntegrationsFromDatabase();
       } else {
         // Profile doesn't exist, might need database setup
         setDatabaseSetup(false);

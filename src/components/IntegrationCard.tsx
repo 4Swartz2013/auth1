@@ -6,6 +6,8 @@ import { useIntegrationStore } from '../store/integrationStore';
 import ConnectModal from './ConnectModal';
 import HealthDrawer from './HealthDrawer';
 import FixButton from './FixButton';
+import HealthDrawer from './HealthDrawer';
+import FixButton from './FixButton';
 
 interface IntegrationCardProps {
   provider: Provider;
@@ -19,9 +21,16 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     deleteCredentialFromDatabase,
     currentUserId,
     integrations
+    setLoading, 
+    loadingProviders, 
+    deleteCredentialFromDatabase,
+    currentUserId,
+    integrations
   } = useIntegrationStore();
   
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showHealthDrawer, setShowHealthDrawer] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showHealthDrawer, setShowHealthDrawer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -38,8 +47,26 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
   const integration = Array.from(integrations.values()).find(i => i.providerKey === provider.key);
   const integrationStatus = integration?.status || (connected ? 'connected' : 'disconnected');
   const hasError = integrationStatus === 'error';
+  
+  // Safely handle loadingProviders - ensure it's always a Set
+  const safeLoadingProviders = loadingProviders instanceof Set 
+    ? loadingProviders 
+    : new Set(Array.isArray(loadingProviders) ? loadingProviders : []);
+  
+  const loading = safeLoadingProviders.has(provider.key);
+
+  // Find integration for this provider
+  const integration = Array.from(integrations.values()).find(i => i.providerKey === provider.key);
+  const integrationStatus = integration?.status || (connected ? 'connected' : 'disconnected');
+  const hasError = integrationStatus === 'error';
 
   const handleConnect = () => {
+    if (!currentUserId) {
+      setError('Please sign in to connect platforms');
+      return;
+    }
+
+    setError(null);
     if (!currentUserId) {
       setError('Please sign in to connect platforms');
       return;
@@ -69,7 +96,28 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (!currentUserId) return;
+
+    setLoading(provider.key, true);
+    
+    const success = await deleteCredentialFromDatabase(provider.key);
+    
+    if (!success) {
+      setError('Failed to disconnect. Please try again.');
+    }
+    
+    setLoading(provider.key, false);
+  };
+
+  const handleViewHealth = () => {
+    if (integration) {
+      setShowHealthDrawer(true);
+    }
+  };
+
   return (
+    <>
     <>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -100,9 +148,18 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
           integrationStatus === 'error' ? 'bg-red-600/30 text-red-400' :
           integrationStatus === 'pending' ? 'bg-yellow-600/30 text-yellow-400' :
           'bg-gray-600/30 text-gray-400'
+          integrationStatus === 'error' ? 'bg-red-600/30 text-red-400' :
+          integrationStatus === 'pending' ? 'bg-yellow-600/30 text-yellow-400' :
+          'bg-gray-600/30 text-gray-400'
         }`}>
           {integrationStatus === 'connected' ? <CheckCircle className="w-4 h-4" /> : 
            integrationStatus === 'error' ? <AlertTriangle className="w-4 h-4" /> :
+           integrationStatus === 'pending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+           <XCircle className="w-4 h-4" />}
+          {integrationStatus === 'connected' ? 'Connected' : 
+           integrationStatus === 'error' ? 'Error' :
+           integrationStatus === 'pending' ? 'Setting up...' :
+           'Not Connected'}
            integrationStatus === 'pending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
            <XCircle className="w-4 h-4" />}
           {integrationStatus === 'connected' ? 'Connected' : 
@@ -119,6 +176,14 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
           </div>
         )}
 
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-2 bg-red-600/20 border border-red-600/30 rounded-lg text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="mt-auto w-full space-y-2">
           {!connected && (
@@ -126,7 +191,17 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
               onClick={handleConnect}
               className="w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold rounded-lg shadow-md hover:from-purple-600 hover:to-pink-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={loading || !currentUserId}
+              disabled={loading || !currentUserId}
             >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin w-4 h-4" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Plug className="w-4 h-4" />
+                  {provider.authType === 'oauth' ? 'Connect Account' : 'Setup Manually'}
               {loading ? (
                 <>
                   <Loader2 className="animate-spin w-4 h-4" />
@@ -149,12 +224,12 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             />
           )}
           
-          {connected && (
-            <>
-              {!hasError && (
-                <button
-                  onClick={handleDisconnect}
-                  className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
+          {connected && hasError && (
+            <FixButton 
+              integrationId={integration!.id} 
+              providerKey={provider.key}
+              errorMessage={integration?.errorMessage}
+            />
                   disabled={loading}
                 >
                   {loading ? (
@@ -178,6 +253,22 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             </>
           )}
           
+          {connected && (
+            <>
+              {!hasError && (
+                <button
+                  onClick={handleDisconnect}
+                  className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="animate-spin w-4 h-4" />
+                      Disconnecting...
+                    </>
+                  ) : (
+                    'Disconnect'
+                  )}
           {provider.docsUrl && (
             <a 
               href={provider.docsUrl} 

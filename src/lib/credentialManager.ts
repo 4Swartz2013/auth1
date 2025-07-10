@@ -120,7 +120,7 @@ export class CredentialManager {
   static async getIntegrations(userId: string): Promise<Integration[]> {
     try {
       const { data, error } = await supabase
-        .from('integrations')
+        .from('integrations') 
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -131,7 +131,7 @@ export class CredentialManager {
       }
 
       return (data || []).map(item => ({
-        id: item.id,
+        id: item.id, 
         userId: item.user_id,
         workspaceId: item.workspace_id,
         providerKey: item.provider_key,
@@ -145,6 +145,44 @@ export class CredentialManager {
         createdAt: item.created_at,
         updatedAt: item.updated_at
       }));
+    } catch (error) {
+      console.error('Error in getIntegrations:', error);
+      return [];
+    }
+  }
+
+  static async getIntegration(userId: string, platform: string): Promise<Integration | null> {
+    try {
+      const { data, error } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider_key', platform)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('Error fetching integration:', error);
+        return null;
+      }
+
+      return {
+        id: data.id,
+        userId: data.user_id,
+        workspaceId: data.workspace_id,
+        providerKey: data.provider_key,
+        providerName: data.provider_name,
+        status: data.status,
+        lastSyncAt: data.last_sync_at,
+        nextSyncAt: data.next_sync_at,
+        healthScore: data.health_score,
+        errorMessage: data.error_message,
+        metadata: data.metadata,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
     } catch (error) {
       console.error('Error in getIntegrations:', error);
       return [];

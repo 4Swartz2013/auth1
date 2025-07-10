@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Copy, CheckCircle, ExternalLink, Lock, Key, AlertTriangle, Loader2 } from 'lucide-react';
+import { X, Copy, CheckCircle, ExternalLink, Lock, Key, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { Provider } from '../types';
-import { useIntegrationStore } from '../store/integrationStore';
+import { useIntegrationStore } from '../store/integrationStore'; 
 import { z } from 'zod';
 
 interface ConnectModalProps {
@@ -20,11 +20,12 @@ const ManualCredentialsSchema = z.object({
 type ManualCredentials = z.infer<typeof ManualCredentialsSchema>;
 
 const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
-  const { saveCredentialToDatabase, currentUserId } = useIntegrationStore();
+  const { saveCredentialToDatabase, currentUserId, setLoading } = useIntegrationStore();
   
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
   const [isManualLoading, setIsManualLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Manual setup state
@@ -50,6 +51,9 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
       
       setIsManualLoading(true);
       
+      // Set loading state in the store
+      setLoading(provider.key, true);
+      
       // Save credentials to database
       const success = await saveCredentialToDatabase(
         provider.key,
@@ -64,11 +68,13 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
 
       if (success) {
         setShowSuccess(true);
+        setLoading(provider.key, false);
         setTimeout(() => {
           onClose();
         }, 2000);
       } else {
         setError('Failed to save credentials. Please try again.');
+        setLoading(provider.key, false);
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -78,6 +84,7 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
         console.error('Error saving credentials:', error);
       }
     } finally {
+      setLoading(provider.key, false);
       setIsManualLoading(false);
     }
   };
@@ -85,11 +92,15 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
   const handleOAuthConnect = async () => {
     if (!currentUserId) {
       setError('Please sign in to connect platforms');
+      toast.error('Please sign in to connect platforms');
       return;
     }
 
     setError(null);
     setIsOAuthLoading(true);
+    
+    // Set loading state in the store
+    setLoading(provider.key, true);
     
     try {
       // Start OAuth flow by calling our API
@@ -106,7 +117,9 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
       
       if (!response.ok) {
         const errorData = await response.json();
+        setLoading(provider.key, false);
         throw new Error(errorData.error || 'Failed to start OAuth flow');
+        setLoading(provider.key, false);
       }
       
       const { authUrl } = await response.json();
@@ -119,7 +132,9 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
       );
       
       if (!popup) {
+        setLoading(provider.key, false);
         throw new Error('Popup blocked. Please allow popups for this site and try again.');
+        setLoading(provider.key, false);
       }
       
       // Poll for popup closure
@@ -127,6 +142,8 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
         if (popup.closed) {
           clearInterval(checkClosed);
           setIsOAuthLoading(false);
+          setLoading(provider.key, false);
+          setLoading(provider.key, false);
           
           // Check if connection was successful
           // This would typically be handled by a callback or event
@@ -140,6 +157,8 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
     } catch (error) {
       console.error('OAuth error:', error);
       setError(error.message || 'Failed to initiate OAuth. Please try again.');
+      setLoading(provider.key, false);
+      setLoading(provider.key, false);
       setIsOAuthLoading(false);
     }
   };
@@ -299,6 +318,11 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
                     <Loader2 className="w-5 h-5 animate-spin" />
                     Connecting...
                   </>
+                ) : isManualLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Connecting...
+                  </>
                 ) : (
                   <>
                     <Lock className="w-5 h-5" />
@@ -307,6 +331,14 @@ const ConnectModal: React.FC<ConnectModalProps> = ({ provider, onClose }) => {
                 )}
               </button>
               
+            
+            {/* Error Display */}
+            {error && (
+              <div className="mt-4 p-3 bg-red-600/20 border border-red-600/30 rounded-lg text-red-300 text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                <span>{error}</span>
+              </div>
+            )}
               <div className="mt-4 flex items-center gap-2 text-sm justify-center">
                 <span className="text-gray-400">Need help?</span>
                 <a
