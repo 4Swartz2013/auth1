@@ -4,6 +4,7 @@ import { User, Mail, Lock, LogIn, UserPlus, AlertCircle, Database, Settings } fr
 import { supabase } from '../lib/supabase';
 import { AuthManager } from '../lib/auth';
 import { User as UserType, Workspace } from '../types/auth';
+import { useIntegrationStore } from '../store/integrationStore';
 import AdminDashboard from './AdminDashboard';
 import ClientDashboard from './ClientDashboard';
 import InvitedUserDashboard from './InvitedUserDashboard';
