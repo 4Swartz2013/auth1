@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { User, Mail, Lock, LogIn, UserPlus, AlertCircle, Database, Settings } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useIntegrationStore } from '../store/integrationStore';
+import { useIntegrationStore } from '../store/integrationStore';
 import { AuthManager } from '../lib/auth';
 import { User as UserType, Workspace } from '../types/auth';
 import AdminDashboard from './AdminDashboard';
@@ -28,6 +29,8 @@ const AuthenticationWrapper: React.FC = () => {
   const [showDatabaseSetup, setShowDatabaseSetup] = useState(false);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
   const [databaseSetup, setDatabaseSetup] = useState(false);
+  
+  const { setCurrentUserId, loadCredentialsFromDatabase } = useIntegrationStore();
   
   const { setCurrentUserId, loadCredentialsFromDatabase } = useIntegrationStore();
 
@@ -68,6 +71,7 @@ const AuthenticationWrapper: React.FC = () => {
           setCurrentWorkspace(null);
           setUserWorkspaces([]);
           setCurrentUserId(null);
+          setCurrentUserId(null);
         }
       });
 
@@ -81,6 +85,7 @@ const AuthenticationWrapper: React.FC = () => {
 
   const handleUserSession = async (authUser: any) => {
     setUser(authUser);
+    setCurrentUserId(authUser.id);
     setCurrentUserId(authUser.id);
 
     try {
@@ -105,6 +110,10 @@ const AuthenticationWrapper: React.FC = () => {
         } else if (workspaces.length > 0) {
           setCurrentWorkspace(workspaces[0]);
         }
+
+        // Load credentials
+        await loadCredentialsFromDatabase();
+        setDatabaseSetup(true);
 
         // Load credentials
         await loadCredentialsFromDatabase();

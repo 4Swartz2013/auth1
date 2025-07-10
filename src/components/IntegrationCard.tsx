@@ -150,31 +150,33 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             />
           )}
           
-          {connected && !hasError && (
-            <button
-              onClick={handleDisconnect}
-              className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="animate-spin w-4 h-4" />
-                  Disconnecting...
-                </>
-              ) : (
-                'Disconnect'
-              )}
-            </button>
-          )}
-          
           {connected && (
-            <button
-              onClick={handleViewHealth}
-              className="w-full px-4 py-2 text-blue-400 hover:text-blue-300 text-sm flex items-center justify-center gap-1 border border-blue-400/30 rounded-lg hover:border-blue-400/50 transition-colors"
-            >
-              <Info className="w-3 h-3" />
-              View Health & Logs
-            </button>
+            <>
+              {!hasError && (
+                <button
+                  onClick={handleDisconnect}
+                  className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="animate-spin w-4 h-4" />
+                      Disconnecting...
+                    </>
+                  ) : (
+                    'Disconnect'
+                  )}
+                </button>
+              )}
+              
+              <button
+                onClick={handleViewHealth}
+                className="w-full px-4 py-2 text-blue-400 hover:text-blue-300 text-sm flex items-center justify-center gap-1 border border-blue-400/30 rounded-lg hover:border-blue-400/50 transition-colors"
+              >
+                <Info className="w-3 h-3" />
+                View Health & Logs
+              </button>
+            </>
           )}
           
           {provider.docsUrl && (
