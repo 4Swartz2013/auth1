@@ -20,7 +20,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     loadingProviders, 
     deleteCredentialFromDatabase,
     currentUserId,
-    integrations
+    integrations,
     setLoading, 
     loadingProviders, 
     deleteCredentialFromDatabase,
@@ -118,7 +118,6 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
 
   return (
     <>
-    <>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -148,18 +147,9 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
           integrationStatus === 'error' ? 'bg-red-600/30 text-red-400' :
           integrationStatus === 'pending' ? 'bg-yellow-600/30 text-yellow-400' :
           'bg-gray-600/30 text-gray-400'
-          integrationStatus === 'error' ? 'bg-red-600/30 text-red-400' :
-          integrationStatus === 'pending' ? 'bg-yellow-600/30 text-yellow-400' :
-          'bg-gray-600/30 text-gray-400'
         }`}>
           {integrationStatus === 'connected' ? <CheckCircle className="w-4 h-4" /> : 
            integrationStatus === 'error' ? <AlertTriangle className="w-4 h-4" /> :
-           integrationStatus === 'pending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-           <XCircle className="w-4 h-4" />}
-          {integrationStatus === 'connected' ? 'Connected' : 
-           integrationStatus === 'error' ? 'Error' :
-           integrationStatus === 'pending' ? 'Setting up...' :
-           'Not Connected'}
            integrationStatus === 'pending' ? <Loader2 className="w-4 h-4 animate-spin" /> :
            <XCircle className="w-4 h-4" />}
           {integrationStatus === 'connected' ? 'Connected' : 
@@ -176,14 +166,6 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
           </div>
         )}
 
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 p-2 bg-red-600/20 border border-red-600/30 rounded-lg text-red-300 text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            <span>{error}</span>
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="mt-auto w-full space-y-2">
           {!connected && (
@@ -191,17 +173,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
               onClick={handleConnect}
               className="w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold rounded-lg shadow-md hover:from-purple-600 hover:to-pink-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={loading || !currentUserId}
-              disabled={loading || !currentUserId}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="animate-spin w-4 h-4" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <Plug className="w-4 h-4" />
-                  {provider.authType === 'oauth' ? 'Connect Account' : 'Setup Manually'}
               {loading ? (
                 <>
                   <Loader2 className="animate-spin w-4 h-4" />
@@ -224,12 +196,12 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             />
           )}
           
-          {connected && hasError && (
-            <FixButton 
-              integrationId={integration!.id} 
-              providerKey={provider.key}
-              errorMessage={integration?.errorMessage}
-            />
+          {connected && (
+            <>
+              {!hasError && (
+                <button
+                  onClick={handleDisconnect}
+                  className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
                   disabled={loading}
                 >
                   {loading ? (
@@ -253,22 +225,6 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
             </>
           )}
           
-          {connected && (
-            <>
-              {!hasError && (
-                <button
-                  onClick={handleDisconnect}
-                  className="w-full px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="animate-spin w-4 h-4" />
-                      Disconnecting...
-                    </>
-                  ) : (
-                    'Disconnect'
-                  )}
           {provider.docsUrl && (
             <a 
               href={provider.docsUrl} 
