@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
 import { decrypt } from "../util/crypto.ts";
-import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,12 +68,6 @@ Deno.serve(async (req) => {
       throw new Error(`Credential not found: ${credentialError?.message || "Unknown error"}`);
     }
 
-    // Get provider configuration
-    const provider = getProvider(integration.provider_key);
-    if (!provider) {
-      throw new Error(`Provider not found: ${integration.provider_key}`);
-    }
-
     // Decrypt tokens
     const accessToken = credential.access_token
       ? decrypt(credential.access_token, encryptionKey)
@@ -92,14 +85,24 @@ Deno.serve(async (req) => {
     // Note: We'll proceed even if this fails, to ensure we clean up our database
     try {
       if (accessToken) {
-        await provider.revokeAccess({
-          userId,
-          integrationId,
-          accessToken,
-          refreshToken,
-          clientId,
-          clientSecret
-        });
+        // Different providers have different revoke endpoints
+        if (integration.provider_key === 'google' || integration.provider_key === 'gmail') {
+          await fetch(`https://oauth2.googleapis.com/revoke?token=${accessToken}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            }
+          });
+        } else if (integration.provider_key === 'slack') {
+          await fetch(`https://slack.com/api/auth.revoke`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+        }
+        // Add more providers as needed
       }
     } catch (revokeError) {
       console.error("Provider revoke error:", revokeError);

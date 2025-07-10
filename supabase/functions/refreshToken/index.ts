@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
 import { encrypt, decrypt } from "../util/crypto.ts";
-import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,12 +77,6 @@ Deno.serve(async (req) => {
       throw new Error("Missing refresh token");
     }
 
-    // Get provider configuration
-    const provider = getProvider(integration.provider_key);
-    if (!provider) {
-      throw new Error(`Provider not found: ${integration.provider_key}`);
-    }
-
     // Get client credentials from environment
     const clientId = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_ID`);
     const clientSecret = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_SECRET`);
@@ -92,26 +85,48 @@ Deno.serve(async (req) => {
       throw new Error(`Missing client credentials for ${integration.provider_key}`);
     }
 
-    // Refresh the token
-    const refreshResult = await provider.refreshToken({
-      userId,
-      integrationId,
-      refreshToken,
-      clientId,
-      clientSecret
-    });
-
-    if (!refreshResult.success) {
-      throw new Error(refreshResult.error || "Failed to refresh token");
+    // Call the appropriate OAuth endpoint to refresh the token
+    let tokenResponse;
+    
+    // Different providers have different refresh token endpoints and parameters
+    if (integration.provider_key === 'google' || integration.provider_key === 'gmail') {
+      tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          refresh_token: refreshToken,
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'refresh_token'
+        })
+      });
+    } else if (integration.provider_key === 'instagram') {
+      // Instagram uses a different refresh mechanism
+      tokenResponse = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${refreshToken}`);
+    } else {
+      throw new Error(`Refresh token not supported for provider: ${integration.provider_key}`);
     }
-
+    
+    const tokenData = await tokenResponse.json();
+    
+    if (!tokenResponse.ok) {
+      throw new Error(tokenData.error_description || tokenData.error || 'Failed to refresh token');
+    }
+    
+    // Calculate new expiry time
+    const expiresAt = tokenData.expires_in 
+      ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString() 
+      : undefined;
+    
     // Encrypt new tokens
-    const encryptedAccessToken = refreshResult.accessToken
-      ? encrypt(refreshResult.accessToken, encryptionKey)
+    const encryptedAccessToken = tokenData.access_token
+      ? encrypt(tokenData.access_token, encryptionKey)
       : null;
     
-    const encryptedRefreshToken = refreshResult.refreshToken
-      ? encrypt(refreshResult.refreshToken, encryptionKey)
+    const encryptedRefreshToken = tokenData.refresh_token
+      ? encrypt(tokenData.refresh_token, encryptionKey)
       : credential.refresh_token; // Keep existing if not provided
 
     // Update credential
@@ -120,7 +135,7 @@ Deno.serve(async (req) => {
       .update({
         access_token: encryptedAccessToken,
         refresh_token: encryptedRefreshToken,
-        expires_at: refreshResult.expiresAt,
+        expires_at: expiresAt,
         last_refreshed_at: new Date().toISOString(),
         status: "connected",
         updated_at: new Date().toISOString()
@@ -153,7 +168,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       success: true,
-      expiresAt: refreshResult.expiresAt
+      expiresAt: expiresAt
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

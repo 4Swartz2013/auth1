@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
-import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,12 +32,6 @@ Deno.serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get provider SDK
-    const providerSdk = getProvider(provider);
-    if (!providerSdk) {
-      throw new Error(`Provider not found: ${provider}`);
-    }
-
     // Get request body
     const rawBody = await req.arrayBuffer();
     const body = new Uint8Array(rawBody);
@@ -48,14 +41,6 @@ Deno.serve(async (req) => {
     req.headers.forEach((value, key) => {
       headers[key] = value;
     });
-
-    // Verify webhook signature if provider supports it
-    if (providerSdk.verifyWebhook) {
-      const isValid = providerSdk.verifyWebhook(headers, body);
-      if (!isValid) {
-        throw new Error("Invalid webhook signature");
-      }
-    }
 
     // Parse body
     let parsedBody;

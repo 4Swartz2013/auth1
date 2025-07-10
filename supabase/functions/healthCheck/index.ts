@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.0";
 import { decrypt } from "../util/crypto.ts";
-import { getProvider } from "../../packages/integrations-core/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,21 +91,6 @@ Deno.serve(async (req) => {
           
           // If token expires in less than 1 hour, refresh it
           if (expiresAt.getTime() - now.getTime() < 60 * 60 * 1000) {
-            // Get provider
-            const provider = getProvider(integration.provider_key);
-            if (!provider) {
-              throw new Error(`Provider not found: ${integration.provider_key}`);
-            }
-            
-            // Decrypt refresh token
-            const refreshToken = credential.refresh_token
-              ? decrypt(credential.refresh_token, encryptionKey)
-              : null;
-            
-            if (!refreshToken) {
-              throw new Error("Missing refresh token");
-            }
-            
             // Get client credentials
             const clientId = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_ID`);
             const clientSecret = Deno.env.get(`${integration.provider_key.toUpperCase()}_CLIENT_SECRET`);
