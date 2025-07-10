@@ -16,7 +16,6 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({ provider }) => {
     isConnected, 
     setLoading, 
     loadingProviders, 
-    saveCredentialToDatabase,
     deleteCredentialFromDatabase,
     currentUserId,
     integrations

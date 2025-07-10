@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Lock, LogIn, UserPlus, AlertCircle, Database, Settings } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useIntegrationStore } from '../store/integrationStore';
 import { AuthManager } from '../lib/auth';
 import { User as UserType, Workspace } from '../types/auth';
 import AdminDashboard from './AdminDashboard';
